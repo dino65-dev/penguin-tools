@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Select an area</title>
+    <link rel="stylesheet" href="capture.css" />
+  </head>
+  <body>
+    <img id="screenImage" alt="Desktop capture" draggable="false" />
+    <div class="shade" id="shade"></div>
+    <div class="selection" id="selection">
+      <span class="handle nw"></span><span class="handle ne"></span><span class="handle sw"></span><span class="handle se"></span>
+      <div class="dimensions" id="dimensions">0 × 0</div>
+      <div class="actions">
+        <button id="cancelButton" title="Cancel">
+          <svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg>
+        </button>
+        <button class="confirm" id="copyButton" title="Copy screenshot">
+          <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
+          <span>Copy</span>
+        </button>
+      </div>
+    </div>
+    <div class="hint" id="hint">
+      <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3m13 5h3a2 2 0 0 0 2-2v-3"/></svg>
+      Click and drag to select an area
+      <button id="hintCancel">Cancel</button>
+    </div>
+    <script src="capture.js"></script>
+  </body>
+</html>
+

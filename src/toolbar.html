@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Penguin Tools</title>
+    <link rel="stylesheet" href="toolbar.css" />
+  </head>
+  <body>
+    <main class="shell" id="shell">
+      <section class="toolbar" aria-label="Penguin Tools toolbar">
+        <div class="brand-block drag-region" title="Drag to move">
+          <div class="meter" id="memoryMeter" style="--value: 0">
+            <div class="meter-inner"><span id="memoryValue">—</span><small>%</small></div>
+          </div>
+          <div class="brand-copy">
+            <strong>Penguin</strong>
+            <span>Memory use</span>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <button class="tool primary" id="captureButton" title="Capture an area">
+          <span class="icon-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3m13 5h3a2 2 0 0 0 2-2v-3M8 8h8v8H8z"/></svg>
+          </span>
+          <span>Screenshot</span>
+        </button>
+
+        <button class="tool" id="folderButton" title="Open screenshot folder">
+          <span class="icon-box lilac">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2h7.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-10Z"/></svg>
+          </span>
+          <span>Pictures</span>
+        </button>
+
+        <button class="tool" id="notesButton" title="Quick note">
+          <span class="icon-box mint">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 5h8M8 12h8M8 16h5"/></svg>
+          </span>
+          <span>Note</span>
+        </button>
+
+        <button class="tool" id="calculatorButton" title="Open calculator">
+          <span class="icon-box peach">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h1m3 0h1m3 0h1M8 16h1m3 0h1m3 0h1"/></svg>
+          </span>
+          <span>Calculator</span>
+        </button>
+
+        <button class="more-button" id="moreButton" aria-label="More tools" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+        </button>
+      </section>
+
+      <section class="panel" id="panel" aria-hidden="true">
+        <div class="panel-tabs" role="tablist">
+          <button class="tab active" data-tab="status" role="tab">System status</button>
+          <button class="tab" data-tab="note" role="tab">Quick note</button>
+          <button class="tab" data-tab="settings" role="tab">Settings</button>
+          <button class="close-panel" id="closePanel" aria-label="Close panel">×</button>
+        </div>
+
+        <div class="tab-view active" id="statusView">
+          <div class="status-grid">
+            <article class="status-card">
+              <div class="status-icon blue"><svg viewBox="0 0 24 24"><path d="M4 13h3l2-7 4 12 2-5h5"/></svg></div>
+              <div><span>Processor</span><strong id="cpuValue">—%</strong></div>
+              <div class="mini-track"><i id="cpuTrack"></i></div>
+            </article>
+            <article class="status-card">
+              <div class="status-icon purple"><svg viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="10" rx="2"/><path d="M8 4v3m4-3v3m4-3v3M8 17v3m4-3v3m4-3v3"/></svg></div>
+              <div><span>Memory</span><strong id="memoryDetail">—</strong></div>
+              <div class="mini-track"><i id="memoryTrack"></i></div>
+            </article>
+            <article class="status-card network-card">
+              <div class="status-icon green"><svg viewBox="0 0 24 24"><path d="m7 15 5 5 5-5M12 4v16M5 9l-3 3 3 3M19 9l3 3-3 3"/></svg></div>
+              <div><span>Network</span><strong><em id="downValue">↓ —</em><em id="upValue">↑ —</em></strong></div>
+            </article>
+          </div>
+          <div class="device-row"><span class="device-dot"></span><div><strong id="hostname">Linux computer</strong><small id="platform">System information</small></div><span id="uptime">— uptime</span></div>
+        </div>
+
+        <div class="tab-view" id="noteView">
+          <label class="note-wrap">
+            <span>Saved automatically on this computer</span>
+            <textarea id="noteField" maxlength="20000" placeholder="Write something to remember…"></textarea>
+          </label>
+        </div>
+
+        <div class="tab-view" id="settingsView">
+          <label class="setting-row"><span><strong>Always on top</strong><small>Keep the toolbar above other windows</small></span><input type="checkbox" id="alwaysOnTop"><i></i></label>
+          <label class="setting-row"><span><strong>Launch at login</strong><small>Start hidden in the system tray</small></span><input type="checkbox" id="launchAtLogin"><i></i></label>
+          <div class="setting-actions"><button id="hideButton">Hide toolbar</button><button class="danger" id="quitButton">Quit app</button></div>
+        </div>
+      </section>
+
+      <div class="toast" id="toast" role="status"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg><div><strong>Copied to clipboard</strong><span id="toastDetail">Screenshot saved</span></div></div>
+    </main>
+    <script src="toolbar.js"></script>
+  </body>
+</html>
+

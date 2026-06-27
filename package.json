@@ -1,0 +1,51 @@
+{
+  "name": "penguin-tools",
+  "version": "0.1.0",
+  "description": "A Microsoft PC Manager-inspired floating toolbox for Linux",
+  "desktopName": "penguin-tools",
+  "main": "main.js",
+  "author": "Penguin Tools contributors",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "check": "node --check main.js && node --check preload.js && node --check src/toolbar.js && node --check src/capture.js",
+    "dist:linux": "electron-builder --linux AppImage deb",
+    "dist:appimage": "electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "^42.5.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "io.penguintools.desktop",
+    "productName": "Penguin Tools",
+    "asar": true,
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "assets/**/*",
+      "LICENSE",
+      "package.json"
+    ],
+    "linux": {
+      "syncDesktopName": true,
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "icon": "assets/icon.svg",
+      "artifactName": "Penguin-Tools-${arch}.${ext}"
+    },
+    "deb": {
+      "depends": [
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "xdg-utils"
+      ]
+    }
+  }
+}
