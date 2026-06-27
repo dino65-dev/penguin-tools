@@ -31,6 +31,9 @@ Then open **Penguin Tools** from your application menu. The installer:
 - works without root access;
 - adds the `penguin-tools` command and application-menu entry;
 - falls back to AppImage extract-and-run mode when FUSE is unavailable.
+- detects a missing Wayland portal and installs the appropriate GNOME, KDE, Hyprland, or wlroots backend using your distro's package manager.
+
+Portal installation requests `sudo` only when the dependency is missing. Set `PENGUIN_TOOLS_SKIP_PORTAL=1` before the install command if you want to manage portal packages yourself.
 
 To uninstall the application while keeping your screenshots and notes:
 
