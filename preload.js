@@ -14,8 +14,17 @@ contextBridge.exposeInMainWorld('penguin', {
   saveNotes: (text) => ipcRenderer.invoke('save-notes', text),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
+  onTheme: (callback) => ipcRenderer.on('theme-update', (_event, value) => callback(value)),
+  onDockState: (callback) => ipcRenderer.on('dock-state', (_event, value) => callback(value)),
+  dockHover: (hovering) => ipcRenderer.send('dock-hover', hovering),
+  getBackends: () => ipcRenderer.invoke('get-backends'),
+  installBackends: () => ipcRenderer.invoke('install-backends'),
+  previewCleanup: () => ipcRenderer.invoke('preview-cleanup'),
+  runCleanup: () => ipcRenderer.invoke('run-cleanup'),
+  scanFolder: () => ipcRenderer.invoke('scan-folder'),
+  onBackendsChanged: (callback) => ipcRenderer.on('backends-changed', (_event, value) => callback(value)),
+  onSecurityProgress: (callback) => ipcRenderer.on('security-progress', (_event, value) => callback(value)),
   expand: (expanded) => ipcRenderer.send('toolbar-expand', expanded),
   hide: () => ipcRenderer.send('hide-toolbar'),
   quit: () => ipcRenderer.send('quit-app'),
 });
-

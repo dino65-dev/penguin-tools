@@ -8,6 +8,9 @@
   </head>
   <body>
     <main class="shell" id="shell">
+      <button class="edge-tab" id="edgeTab" aria-label="Reveal Penguin Tools">
+        <span></span><span></span><span></span>
+      </button>
       <section class="toolbar" aria-label="Penguin Tools toolbar">
         <div class="brand-block drag-region" title="Drag to move">
           <div class="meter" id="memoryMeter" style="--value: 0">
@@ -57,9 +60,30 @@
       <section class="panel" id="panel" aria-hidden="true">
         <div class="panel-tabs" role="tablist">
           <button class="tab active" data-tab="status" role="tab">System status</button>
+          <button class="tab" data-tab="power" role="tab">Power tools</button>
           <button class="tab" data-tab="note" role="tab">Quick note</button>
           <button class="tab" data-tab="settings" role="tab">Settings</button>
           <button class="close-panel" id="closePanel" aria-label="Close panel">×</button>
+        </div>
+
+        <div class="tab-view" id="powerView">
+          <div class="backend-head">
+            <div><strong>Linux maintenance engines</strong><span>Open-source tools, run locally</span></div>
+            <div class="backend-badges"><i id="bleachBadge">Cleaner</i><i id="clamBadge">Security</i></div>
+          </div>
+          <div class="power-grid">
+            <article class="power-card">
+              <div class="power-icon clean"><svg viewBox="0 0 24 24"><path d="M4 17h16M7 17l1-8h8l1 8M9 9V6h6v3M8 20h8"/></svg></div>
+              <div><strong>Safe cleanup</strong><span>BleachBit cache, temporary files and trash</span></div>
+              <div class="power-actions"><button id="previewCleanup">Preview</button><button class="accent hidden" id="runCleanup">Clean now</button></div>
+            </article>
+            <article class="power-card">
+              <div class="power-icon shield"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.8 2.9 8.1 7 10 4.1-1.9 7-5.2 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+              <div><strong>Threat scan</strong><span>Choose any folder and scan it with ClamAV</span></div>
+              <div class="power-actions"><button id="scanFolder">Choose folder</button></div>
+            </article>
+          </div>
+          <div class="power-footer"><pre id="powerOutput">Checking available backends…</pre><button id="installBackends">Install engines</button></div>
         </div>
 
         <div class="tab-view active" id="statusView">
@@ -91,6 +115,7 @@
 
         <div class="tab-view" id="settingsView">
           <label class="setting-row"><span><strong>Always on top</strong><small>Keep the toolbar above other windows</small></span><input type="checkbox" id="alwaysOnTop"><i></i></label>
+          <label class="setting-row"><span><strong>Dark appearance</strong><small>Use the compact dark toolbar theme</small></span><input type="checkbox" id="darkMode"><i></i></label>
           <label class="setting-row"><span><strong>Launch at login</strong><small>Start hidden in the system tray</small></span><input type="checkbox" id="launchAtLogin"><i></i></label>
           <div class="setting-actions"><button id="hideButton">Hide toolbar</button><button class="danger" id="quitButton">Quit app</button></div>
         </div>
@@ -101,4 +126,3 @@
     <script src="toolbar.js"></script>
   </body>
 </html>
-

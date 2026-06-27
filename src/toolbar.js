@@ -5,6 +5,19 @@ const noteField = document.getElementById('noteField');
 let expanded = false;
 let notesLoaded = false;
 let saveTimer;
+let dockedSide = null;
+
+function setTheme({ darkMode }) {
+  document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+}
+
+function setDockState({ side, revealed }) {
+  dockedSide = side;
+  shell.classList.toggle('docked', Boolean(side));
+  shell.classList.toggle('dock-left', side === 'left');
+  shell.classList.toggle('dock-right', side === 'right');
+  shell.classList.toggle('dock-hidden', Boolean(side) && !revealed);
+}
 
 function bytes(value) {
   if (!Number.isFinite(value) || value < 1) return '0 B/s';
@@ -56,6 +69,21 @@ async function showTab(name) {
     noteField.value = await window.penguin.readNotes();
     notesLoaded = true;
   }
+  if (name === 'power') refreshBackends();
+}
+
+async function refreshBackends() {
+  const backends = await window.penguin.getBackends();
+  document.getElementById('bleachBadge').classList.toggle('ready', backends.bleachbit);
+  document.getElementById('clamBadge').classList.toggle('ready', backends.clamav);
+  document.getElementById('bleachBadge').textContent = backends.bleachbit ? 'Cleaner ready' : 'Cleaner missing';
+  document.getElementById('clamBadge').textContent = backends.clamav ? 'Security ready' : 'Security missing';
+  document.getElementById('previewCleanup').disabled = !backends.bleachbit;
+  document.getElementById('scanFolder').disabled = !backends.clamav;
+  document.getElementById('installBackends').style.display = backends.bleachbit && backends.clamav ? 'none' : 'block';
+  document.getElementById('powerOutput').textContent = backends.bleachbit && backends.clamav
+    ? 'BleachBit and ClamAV are ready.'
+    : 'Install the missing engines for cleanup and threat scanning.';
 }
 
 function showToast(payload) {
@@ -82,12 +110,68 @@ document.getElementById('alwaysOnTop').addEventListener('change', (event) => win
 document.getElementById('launchAtLogin').addEventListener('change', (event) => window.penguin.setSetting('launchAtLogin', event.target.checked));
 document.getElementById('hideButton').addEventListener('click', () => window.penguin.hide());
 document.getElementById('quitButton').addEventListener('click', () => window.penguin.quit());
+document.getElementById('darkMode').addEventListener('change', (event) => window.penguin.setSetting('darkMode', event.target.checked));
+
+document.body.addEventListener('mouseenter', () => { if (dockedSide) window.penguin.dockHover(true); });
+document.body.addEventListener('mouseleave', () => { if (dockedSide) window.penguin.dockHover(false); });
+document.getElementById('edgeTab').addEventListener('mouseenter', () => window.penguin.dockHover(true));
+document.getElementById('edgeTab').addEventListener('click', () => window.penguin.dockHover(true));
+
+document.getElementById('previewCleanup').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  const output = document.getElementById('powerOutput');
+  button.disabled = true;
+  output.textContent = 'Previewing safe cleanup targets…';
+  const result = await window.penguin.previewCleanup();
+  output.textContent = result.ok ? result.output || 'Preview complete.' : result.error;
+  button.disabled = false;
+  document.getElementById('runCleanup').classList.toggle('hidden', !result.ok);
+});
+
+document.getElementById('runCleanup').addEventListener('click', async (event) => {
+  if (!confirm('Delete the previewed cache, temporary files, and trash?')) return;
+  const button = event.currentTarget;
+  const output = document.getElementById('powerOutput');
+  button.disabled = true;
+  output.textContent = 'Cleaning previewed targets…';
+  const result = await window.penguin.runCleanup();
+  output.textContent = result.ok ? result.output || 'Cleanup complete.' : result.error;
+  button.disabled = false;
+  button.classList.add('hidden');
+});
+
+document.getElementById('scanFolder').addEventListener('click', async () => {
+  const output = document.getElementById('powerOutput');
+  const result = await window.penguin.scanFolder();
+  if (result.ok) output.textContent = `Scanning ${result.target}…`;
+  else if (!result.canceled) output.textContent = result.error;
+});
+
+document.getElementById('installBackends').addEventListener('click', async () => {
+  const output = document.getElementById('powerOutput');
+  output.textContent = 'Opening the system authorization prompt…';
+  const result = await window.penguin.installBackends();
+  if (!result.ok) output.textContent = result.error;
+  else output.textContent = `Installing with ${result.manager}…`;
+});
 
 window.penguin.onStats(updateStats);
 window.penguin.onCaptureComplete(showToast);
+window.penguin.onTheme(setTheme);
+window.penguin.onDockState(setDockState);
+window.penguin.onBackendsChanged(({ code, error, backends }) => {
+  document.getElementById('powerOutput').textContent = error || (code === 0 ? 'Backend installation complete.' : `Installer exited with code ${code}.`);
+  if (backends) refreshBackends();
+});
+window.penguin.onSecurityProgress(({ status, target, message }) => {
+  const output = document.getElementById('powerOutput');
+  if (status === 'running') output.textContent = `Scanning ${target}…`;
+  else output.textContent = message || status;
+});
 window.penguin.getStats().then(updateStats);
 window.penguin.getSettings().then((settings) => {
   document.getElementById('alwaysOnTop').checked = settings.alwaysOnTop;
   document.getElementById('launchAtLogin').checked = settings.launchAtLogin;
+  document.getElementById('darkMode').checked = settings.darkMode;
+  setTheme(settings);
 });
-

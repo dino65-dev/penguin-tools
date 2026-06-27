@@ -4,9 +4,13 @@ A small, mouse-first Linux desktop toolbox inspired by Microsoft PC Manager's fl
 
 ![Penguin Tools floating toolbar](docs/toolbar.png)
 
+![Penguin Tools power tools panel](docs/power-tools.png)
+
 ## Features
 
 - Draggable, frameless floating toolbar with a Windows 11 / PC Manager visual style
+- Compact light and dark appearances
+- Snap to the left or right screen edge, retract to a 14-pixel tab, and reveal on hover
 - Select any rectangular screen area using only the mouse
 - Copy the capture directly to the system clipboard
 - Also save every capture as a PNG in `~/Pictures/Penguin Tools`
@@ -15,6 +19,7 @@ A small, mouse-first Linux desktop toolbox inspired by Microsoft PC Manager's fl
 - Opens your installed Linux calculator
 - System tray controls, always-on-top toggle, and launch-at-login option
 - X11 and Wayland support through Electron's desktop-capture APIs
+- Optional BleachBit cleanup and ClamAV folder scanning from the Power Tools panel
 
 ## Install
 
@@ -57,6 +62,15 @@ On Wayland, screen capture uses the desktop portal. Install the portal implement
 - wlroots compositors: `xdg-desktop-portal-wlr`
 
 Some Wayland desktops show a one-time system screen-sharing chooser. That prompt is controlled by the compositor and cannot be bypassed safely by applications.
+
+## Power Tools backends
+
+Penguin Tools detects and integrates two established open-source Linux engines:
+
+- [BleachBit](https://docs.bleachbit.org/doc/command-line-interface.html) previews safe user cache, temporary-file, and trash cleanup before deletion. Cleaning requires a second explicit confirmation.
+- [ClamAV](https://docs.clamav.net/manual/Usage/Scanning.html) provides on-demand recursive scanning for any folder selected with the mouse.
+
+If either engine is missing, open **Power Tools** and click **Install engines**. Penguin Tools detects APT, DNF, Pacman, or Zypper and uses the desktop Polkit authorization dialog; no terminal command needs to be typed.
 
 ## Releases
 

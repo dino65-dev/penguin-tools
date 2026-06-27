@@ -7,6 +7,7 @@ const {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   Notification,
   screen,
   shell,
@@ -17,8 +18,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
 
-const TOOLBAR_SIZE = { width: 632, height: 92 };
-const TOOLBAR_EXPANDED_HEIGHT = 360;
+const TOOLBAR_SIZE = { width: 508, height: 72 };
+const TOOLBAR_EXPANDED_HEIGHT = 342;
+const EDGE_THRESHOLD = 30;
+const EDGE_TAB_WIDTH = 14;
 const CAPTURE_DIR = path.join(app.getPath('pictures'), 'Penguin Tools');
 const NOTES_FILE = path.join(app.getPath('userData'), 'notes.txt');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
@@ -32,12 +35,26 @@ let isQuitting = false;
 let previousCpu = readCpuTimes();
 let previousNetwork = readNetworkBytes();
 let previousNetworkAt = Date.now();
+let dockSide = null;
+let dockDisplayId = null;
+let dockHideTimer;
+let isDockRevealed = true;
+let isProgrammaticMove = false;
+let toolbarExpanded = false;
 
 function readSettings() {
+  const defaults = {
+    alwaysOnTop: true,
+    launchAtLogin: false,
+    darkMode: nativeTheme.shouldUseDarkColors,
+    dockSide: null,
+    dockDisplayId: null,
+    dockY: null,
+  };
   try {
-    return { alwaysOnTop: true, launchAtLogin: false, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
+    return { ...defaults, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
   } catch {
-    return { alwaysOnTop: true, launchAtLogin: false };
+    return defaults;
   }
 }
 
@@ -51,6 +68,9 @@ function createToolbarWindow() {
   const x = Math.round(display.workArea.x + (display.workArea.width - TOOLBAR_SIZE.width) / 2);
   const y = Math.round(display.workArea.y + display.workArea.height - TOOLBAR_SIZE.height - 24);
   const settings = readSettings();
+  nativeTheme.themeSource = settings.darkMode ? 'dark' : 'light';
+  dockSide = settings.dockSide;
+  dockDisplayId = settings.dockDisplayId;
 
   toolbarWindow = new BrowserWindow({
     ...TOOLBAR_SIZE,
@@ -83,8 +103,15 @@ function createToolbarWindow() {
   toolbarWindow.loadFile(path.join(__dirname, 'src', 'toolbar.html'));
   toolbarWindow.once('ready-to-show', () => {
     toolbarWindow.showInactive();
+    toolbarWindow.webContents.send('theme-update', { darkMode: settings.darkMode });
+    if (dockSide) {
+      const savedDisplay = screen.getAllDisplays().find((item) => item.id === dockDisplayId) || display;
+      const dockY = Number.isFinite(settings.dockY) ? settings.dockY : y;
+      dockToolbar(dockSide, savedDisplay, dockY, true);
+    }
     if (process.argv.includes('--qa-screenshots')) runVisualQa();
     else if (process.argv.includes('--qa-capture')) setTimeout(beginCapture, 700);
+    else if (process.argv.includes('--qa-edge')) runEdgeQa();
   });
   toolbarWindow.on('close', (event) => {
     if (!isQuitting) {
@@ -92,6 +119,7 @@ function createToolbarWindow() {
       toolbarWindow.hide();
     }
   });
+  toolbarWindow.on('moved', handleToolbarMoved);
 
   if (process.argv.includes('--hidden')) toolbarWindow.once('ready-to-show', () => toolbarWindow.hide());
 }
@@ -106,6 +134,35 @@ async function runVisualQa() {
   await new Promise((resolve) => setTimeout(resolve, 500));
   const expanded = await toolbarWindow.webContents.capturePage();
   await fs.promises.writeFile(path.join(qaDir, 'toolbar-expanded.png'), expanded.toPNG());
+  await toolbarWindow.webContents.executeJavaScript("document.documentElement.dataset.theme='dark'; showTab('power')", true);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const darkPower = await toolbarWindow.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'toolbar-dark-power.png'), darkPower.toPNG());
+  isQuitting = true;
+  app.quit();
+}
+
+async function runEdgeQa() {
+  const original = readSettings();
+  const display = screen.getPrimaryDisplay();
+  const qaDir = path.join(__dirname, 'work');
+  await fs.promises.mkdir(qaDir, { recursive: true });
+  dockToolbar('right', display, display.workArea.y + 100, true);
+  await new Promise((resolve) => setTimeout(resolve, 1300));
+  const hidden = toolbarWindow.getBounds();
+  revealDock();
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  const revealed = toolbarWindow.getBounds();
+  const expectedHiddenX = display.workArea.x + display.workArea.width - EDGE_TAB_WIDTH;
+  const expectedRevealedX = display.workArea.x + display.workArea.width - TOOLBAR_SIZE.width;
+  await fs.promises.writeFile(path.join(qaDir, 'edge-dock-qa.json'), JSON.stringify({
+    hidden,
+    revealed,
+    expectedHiddenX,
+    expectedRevealedX,
+    passed: hidden.x === expectedHiddenX && revealed.x === expectedRevealedX,
+  }, null, 2));
+  writeSettings(original);
   isQuitting = true;
   app.quit();
 }
@@ -133,6 +190,85 @@ function createTray() {
 function showToolbar() {
   if (!toolbarWindow) return;
   toolbarWindow.showInactive();
+  if (dockSide) {
+    revealDock();
+    scheduleDockHide(1800);
+  }
+}
+
+function setToolbarBounds(bounds, animate = false) {
+  if (!toolbarWindow || toolbarWindow.isDestroyed()) return;
+  isProgrammaticMove = true;
+  toolbarWindow.setBounds(bounds, animate);
+  setTimeout(() => { isProgrammaticMove = false; }, animate ? 320 : 80);
+}
+
+function getDockDisplay() {
+  return screen.getAllDisplays().find((item) => item.id === dockDisplayId)
+    || screen.getDisplayNearestPoint({ x: toolbarWindow.getBounds().x, y: toolbarWindow.getBounds().y });
+}
+
+function dockToolbar(side, display, preferredY, hideAfter = true) {
+  if (!toolbarWindow) return;
+  dockSide = side;
+  dockDisplayId = display.id;
+  isDockRevealed = true;
+  const bounds = toolbarWindow.getBounds();
+  const area = display.workArea;
+  const y = Math.max(area.y, Math.min(Math.round(preferredY), area.y + area.height - bounds.height));
+  const x = side === 'left' ? area.x : area.x + area.width - bounds.width;
+  setToolbarBounds({ ...bounds, x, y }, true);
+  toolbarWindow.webContents.send('dock-state', { side, revealed: true });
+  const settings = readSettings();
+  writeSettings({ ...settings, dockSide: side, dockDisplayId: display.id, dockY: y });
+  if (hideAfter) scheduleDockHide(850);
+}
+
+function handleToolbarMoved() {
+  if (isProgrammaticMove || !toolbarWindow || toolbarExpanded) return;
+  const bounds = toolbarWindow.getBounds();
+  const display = screen.getDisplayNearestPoint({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 });
+  const area = display.workArea;
+  if (bounds.x <= area.x + EDGE_THRESHOLD) return dockToolbar('left', display, bounds.y);
+  if (bounds.x + bounds.width >= area.x + area.width - EDGE_THRESHOLD) return dockToolbar('right', display, bounds.y);
+
+  if (dockSide) {
+    dockSide = null;
+    dockDisplayId = null;
+    isDockRevealed = true;
+    clearTimeout(dockHideTimer);
+    toolbarWindow.webContents.send('dock-state', { side: null, revealed: true });
+    const settings = readSettings();
+    writeSettings({ ...settings, dockSide: null, dockDisplayId: null, dockY: null });
+  }
+}
+
+function revealDock() {
+  if (!dockSide || !toolbarWindow) return;
+  clearTimeout(dockHideTimer);
+  const area = getDockDisplay().workArea;
+  const bounds = toolbarWindow.getBounds();
+  const x = dockSide === 'left' ? area.x : area.x + area.width - bounds.width;
+  isDockRevealed = true;
+  setToolbarBounds({ ...bounds, x }, true);
+  toolbarWindow.webContents.send('dock-state', { side: dockSide, revealed: true });
+}
+
+function hideDock() {
+  if (!dockSide || !toolbarWindow || toolbarExpanded) return;
+  const area = getDockDisplay().workArea;
+  const bounds = toolbarWindow.getBounds();
+  const x = dockSide === 'left'
+    ? area.x - bounds.width + EDGE_TAB_WIDTH
+    : area.x + area.width - EDGE_TAB_WIDTH;
+  isDockRevealed = false;
+  setToolbarBounds({ ...bounds, x }, true);
+  toolbarWindow.webContents.send('dock-state', { side: dockSide, revealed: false });
+}
+
+function scheduleDockHide(delay = 650) {
+  clearTimeout(dockHideTimer);
+  if (dockSide && !toolbarExpanded) dockHideTimer = setTimeout(hideDock, delay);
 }
 
 function readCpuTimes() {
@@ -335,6 +471,112 @@ function launchCalculator() {
   attempt(0);
 }
 
+function execFileAsync(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(command, args, { timeout: 10 * 60 * 1000, maxBuffer: 8 * 1024 * 1024, ...options }, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+}
+
+async function commandAvailable(command) {
+  if (process.platform !== 'linux') return false;
+  try {
+    await execFileAsync('sh', ['-lc', 'command -v "$1" >/dev/null 2>&1', 'penguin-tools', command], { timeout: 3000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getBackends() {
+  const [bleachbit, clamav, fastfetch, pkexec] = await Promise.all([
+    commandAvailable('bleachbit'),
+    commandAvailable('clamscan'),
+    commandAvailable('fastfetch'),
+    commandAvailable('pkexec'),
+  ]);
+  return { bleachbit, clamav, fastfetch, pkexec };
+}
+
+async function bleachBitCleaners() {
+  const { stdout } = await execFileAsync('bleachbit', ['--list-cleaners'], { timeout: 20000 });
+  const installed = new Set(stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+  return ['system.cache', 'system.tmp', 'system.trash'].filter((cleaner) => installed.has(cleaner));
+}
+
+async function runBleachBit(mode) {
+  if (!await commandAvailable('bleachbit')) return { ok: false, error: 'BleachBit is not installed.' };
+  try {
+    const cleaners = await bleachBitCleaners();
+    if (!cleaners.length) return { ok: false, error: 'No safe cleanup targets were found.' };
+    const { stdout, stderr } = await execFileAsync('bleachbit', [`--${mode}`, ...cleaners]);
+    const output = `${stdout}\n${stderr}`.trim();
+    return { ok: true, cleaners, output: output.split(/\r?\n/).slice(-12).join('\n') };
+  } catch (error) {
+    return { ok: false, error: (error.stderr || error.message || 'BleachBit failed.').trim() };
+  }
+}
+
+async function startClamScan() {
+  if (!await commandAvailable('clamscan')) return { ok: false, error: 'ClamAV is not installed.' };
+  const choice = await dialog.showOpenDialog(toolbarWindow, {
+    title: 'Choose a folder to scan',
+    buttonLabel: 'Scan this folder',
+    properties: ['openDirectory'],
+  });
+  if (choice.canceled || !choice.filePaths[0]) return { ok: false, canceled: true };
+
+  const target = choice.filePaths[0];
+  const child = spawn('clamscan', ['--recursive', '--infected', target], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let output = '';
+  const collect = (chunk) => {
+    output = `${output}${chunk}`.slice(-24000);
+    toolbarWindow?.webContents.send('security-progress', { status: 'running', target });
+  };
+  child.stdout.on('data', collect);
+  child.stderr.on('data', collect);
+  child.on('error', (error) => toolbarWindow?.webContents.send('security-progress', { status: 'error', target, message: error.message }));
+  child.on('close', (code) => {
+    const summary = output.split(/\r?\n/).filter(Boolean).slice(-14).join('\n');
+    toolbarWindow?.webContents.send('security-progress', {
+      status: code === 0 ? 'clean' : code === 1 ? 'infected' : 'error',
+      target,
+      message: summary || (code === 0 ? 'No threats found.' : `Scanner exited with code ${code}.`),
+    });
+  });
+  return { ok: true, target };
+}
+
+async function installPowerBackends() {
+  if (process.platform !== 'linux') return { ok: false, error: 'Backend installation is available on Linux.' };
+  if (!await commandAvailable('pkexec')) return { ok: false, error: 'Polkit (pkexec) is required for mouse-only installation.' };
+  const candidates = [
+    { manager: 'apt-get', args: ['install', '-y', 'bleachbit', 'clamav'] },
+    { manager: 'dnf', args: ['install', '-y', 'bleachbit', 'clamav'] },
+    { manager: 'pacman', args: ['-S', '--needed', '--noconfirm', 'bleachbit', 'clamav'] },
+    { manager: 'zypper', args: ['--non-interactive', 'install', 'bleachbit', 'clamav'] },
+  ];
+  const selected = await candidates.reduce(async (pending, candidate) => {
+    const found = await pending;
+    return found || (await commandAvailable(candidate.manager) ? candidate : null);
+  }, Promise.resolve(null));
+  if (!selected) return { ok: false, error: 'Supported package manager not found.' };
+
+  const child = spawn('pkexec', [selected.manager, ...selected.args], { detached: false, stdio: 'ignore' });
+  child.on('close', async (code) => {
+    toolbarWindow?.webContents.send('backends-changed', { code, backends: await getBackends() });
+  });
+  child.on('error', (error) => toolbarWindow?.webContents.send('backends-changed', { code: -1, error: error.message }));
+  return { ok: true, manager: selected.manager };
+}
+
 ipcMain.handle('get-stats', () => systemStats());
 ipcMain.handle('capture-region', () => beginCapture());
 ipcMain.on('capture-finish', (_event, rect) => finishCapture(rect));
@@ -351,19 +593,39 @@ ipcMain.handle('save-notes', async (_event, text) => {
 ipcMain.handle('get-settings', () => readSettings());
 ipcMain.handle('set-setting', (_event, key, value) => {
   const settings = readSettings();
-  if (!['alwaysOnTop', 'launchAtLogin'].includes(key)) return settings;
+  if (!['alwaysOnTop', 'launchAtLogin', 'darkMode'].includes(key)) return settings;
   settings[key] = Boolean(value);
   writeSettings(settings);
   if (key === 'alwaysOnTop') toolbarWindow.setAlwaysOnTop(settings[key], 'floating');
   if (key === 'launchAtLogin') app.setLoginItemSettings({ openAtLogin: settings[key], args: ['--hidden'] });
+  if (key === 'darkMode') {
+    nativeTheme.themeSource = settings[key] ? 'dark' : 'light';
+    toolbarWindow.webContents.send('theme-update', { darkMode: settings[key] });
+  }
   return settings;
 });
 ipcMain.on('toolbar-expand', (_event, expanded) => {
   if (!toolbarWindow) return;
+  toolbarExpanded = expanded;
+  clearTimeout(dockHideTimer);
+  if (dockSide && !isDockRevealed) revealDock();
   const bounds = toolbarWindow.getBounds();
   const nextHeight = expanded ? TOOLBAR_EXPANDED_HEIGHT : TOOLBAR_SIZE.height;
-  toolbarWindow.setBounds({ x: bounds.x, y: bounds.y - (nextHeight - bounds.height), width: bounds.width, height: nextHeight }, true);
+  const display = screen.getDisplayNearestPoint({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 });
+  const desiredY = dockSide ? bounds.y : bounds.y - (nextHeight - bounds.height);
+  const y = Math.max(display.workArea.y, Math.min(desiredY, display.workArea.y + display.workArea.height - nextHeight));
+  setToolbarBounds({ x: bounds.x, y, width: bounds.width, height: nextHeight }, true);
+  if (!expanded) scheduleDockHide(900);
 });
+ipcMain.on('dock-hover', (_event, hovering) => {
+  if (hovering) revealDock();
+  else scheduleDockHide(520);
+});
+ipcMain.handle('get-backends', getBackends);
+ipcMain.handle('install-backends', installPowerBackends);
+ipcMain.handle('preview-cleanup', () => runBleachBit('preview'));
+ipcMain.handle('run-cleanup', () => runBleachBit('clean'));
+ipcMain.handle('scan-folder', startClamScan);
 ipcMain.on('hide-toolbar', () => toolbarWindow?.hide());
 ipcMain.on('quit-app', () => { isQuitting = true; app.quit(); });
 
