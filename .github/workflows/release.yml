@@ -17,15 +17,15 @@ jobs:
         arch: [x64, arm64]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run check
       - name: Build AppImage and Debian package
-        run: npx electron-builder --linux AppImage deb --${{ matrix.arch }}
+        run: npx electron-builder --linux AppImage deb --${{ matrix.arch }} --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.arch }}
