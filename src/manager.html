@@ -1,0 +1,2122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Penguin PC Manager</title>
+<style>
+  :root {
+    /* Penguin palette — deep ocean + warm belly + icy accents */
+    --bg-deep:        #0c1118;
+    --bg-base:        #11161f;
+    --bg-surface:     #181f2a;
+    --bg-card:        linear-gradient(160deg, rgba(38,46,62,0.85) 0%, rgba(26,33,46,0.85) 100%);
+    --bg-card-hover:  linear-gradient(160deg, rgba(46,56,76,0.95) 0%, rgba(32,40,56,0.95) 100%);
+    --bg-tip:         linear-gradient(135deg, #2d3a5e 0%, #4a3a78 50%, #6b3a78 100%);
+    --bg-titlebar:    rgba(10,14,20,0.85);
+    --bg-sidebar:     rgba(12,17,24,0.85);
+
+    /* Brand — penguin belly orange + ice */
+    --penguin-orange: #ff8c5a;
+    --penguin-peach:  #ffb38a;
+    --penguin-yellow: #ffd16a;
+    --penguin-black:  #1a1f2a;
+
+    /* Accents */
+    --ice:            #7BD7F0;
+    --mint:           #7FE3B8;
+    --rose:           #FF9EB5;
+    --lavender:       #B89EFF;
+    --boost-bar:      linear-gradient(90deg, #FFB38A 0%, #FF8C5A 50%, #FF6B6B 100%);
+    --cpu-bar:        linear-gradient(90deg, #7BD7F0 0%, #7BD7F0 100%);
+
+    /* Disk colors */
+    --disk-user:      #e74a4a;
+    --disk-app:       #f5a623;
+    --disk-system:    #4ba3f5;
+    --disk-recycle:   #6dd58c;
+    --disk-other:     #9aa3af;
+
+    /* Text */
+    --text:           #f3f5f9;
+    --text-soft:      rgba(243,245,249,0.74);
+    --text-dim:       rgba(243,245,249,0.48);
+    --text-faint:     rgba(243,245,249,0.28);
+
+    /* Borders / shadow */
+    --border:         rgba(255,255,255,0.06);
+    --border-strong:  rgba(255,255,255,0.12);
+    --shadow-card:    0 1px 0 rgba(255,255,255,0.05) inset,
+                      0 -1px 0 rgba(0,0,0,0.40) inset,
+                      0 12px 32px rgba(0,0,0,0.40),
+                      0 2px 6px rgba(0,0,0,0.20);
+    --shadow-hover:   0 1px 0 rgba(255,255,255,0.08) inset,
+                      0 -1px 0 rgba(0,0,0,0.40) inset,
+                      0 20px 50px rgba(0,0,0,0.55),
+                      0 4px 10px rgba(0,0,0,0.30);
+
+    --r-card:    14px;
+    --r-button:  10px;
+    --r-pill:    999px;
+
+    --font-ui:   "Segoe UI Variable Display", "Segoe UI", -apple-system,
+                 BlinkMacSystemFont, system-ui, sans-serif;
+    --font-num:  "Cascadia Code", "JetBrains Mono", "SF Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font-family: var(--font-ui);
+    color: var(--text);
+    background: var(--bg-deep);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ============================================
+     ANIMATED BACKGROUND — aurora + particles
+     ============================================ */
+  .bg {
+    position: fixed; inset: 0; z-index: -2;
+    background:
+      radial-gradient(900px 600px at 12% 8%, rgba(123,215,240,0.12) 0%, transparent 60%),
+      radial-gradient(1100px 700px at 90% 20%, rgba(255,140,90,0.10) 0%, transparent 60%),
+      radial-gradient(800px 600px at 50% 100%, rgba(184,158,255,0.10) 0%, transparent 60%),
+      var(--bg-deep);
+  }
+  .bg::before, .bg::after {
+    content: ""; position: absolute; border-radius: 50%;
+    filter: blur(100px); opacity: 0.5;
+    animation: drift 24s ease-in-out infinite alternate;
+  }
+  .bg::before {
+    width: 480px; height: 480px;
+    background: radial-gradient(circle, rgba(255,140,90,0.35) 0%, transparent 70%);
+    top: -10%; left: -10%;
+  }
+  .bg::after {
+    width: 520px; height: 520px;
+    background: radial-gradient(circle, rgba(123,215,240,0.30) 0%, transparent 70%);
+    bottom: -15%; right: -10%;
+    animation-delay: -12s;
+  }
+  @keyframes drift {
+    0%   { transform: translate(0, 0)       scale(1);    }
+    50%  { transform: translate(60px, 40px) scale(1.1);  }
+    100% { transform: translate(-40px, 60px) scale(0.92);}
+  }
+
+  /* grain overlay for premium texture */
+  .grain {
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    mix-blend-mode: overlay;
+  }
+
+  /* ============================================
+     APP SHELL
+     ============================================ */
+  .app {
+    display: grid;
+    grid-template-rows: 44px 1fr;
+    grid-template-columns: 76px 1fr;
+    grid-template-areas:
+      "title title"
+      "sidebar main";
+    width: 100vw; height: 100vh;
+  }
+
+  /* ---------- Title bar ---------- */
+  .titlebar {
+    grid-area: title;
+    background: var(--bg-titlebar);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 14px;
+    -webkit-app-region: drag;
+    user-select: none;
+    position: relative;
+  }
+  .titlebar::after {
+    content: ""; position: absolute; bottom: 0; left: 4%; right: 4%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent);
+  }
+  .brand {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 12.5px; font-weight: 500;
+    letter-spacing: 0.01em;
+    color: var(--text);
+  }
+  .brand .penguin {
+    width: 22px; height: 22px;
+    transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
+  }
+  .brand:hover .penguin { transform: rotate(-8deg) scale(1.08); }
+
+  .spacer { flex: 1; }
+
+  .win-btn {
+    width: 30px; height: 24px;
+    display: grid; place-items: center;
+    cursor: pointer;
+    color: var(--text-soft);
+    border-radius: 6px;
+    -webkit-app-region: no-drag;
+    transition: background 0.12s ease, color 0.12s ease;
+    margin-left: 2px;
+  }
+  .win-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+  .win-btn.close:hover { background: #e81123; color: #fff; }
+  .win-btn svg { width: 10px; height: 10px; }
+  .win-btns { display: flex; -webkit-app-region: no-drag; }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    grid-area: sidebar;
+    background: var(--bg-sidebar);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 12px 0;
+    gap: 2px;
+  }
+  .nav-item {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 4px;
+    padding: 10px 4px;
+    color: var(--text-faint);
+    font-size: 9.5px;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease;
+    position: relative;
+  }
+  .nav-item:hover { color: var(--text-soft); }
+  .nav-item.active {
+    color: var(--penguin-orange);
+  }
+  .nav-item.active::before {
+    content: ""; position: absolute;
+    left: 0; top: 10px; bottom: 10px; width: 3px;
+    background: linear-gradient(180deg, var(--penguin-peach) 0%, var(--penguin-orange) 100%);
+    border-radius: 0 2px 2px 0;
+    box-shadow: 0 0 12px rgba(255,140,90,0.50);
+  }
+  .nav-item .nav-ic {
+    width: 32px; height: 32px;
+    display: grid; place-items: center;
+    border-radius: 9px;
+    background: rgba(255,255,255,0.03);
+    transition: background 0.2s ease, transform 0.25s cubic-bezier(0.16,1,0.3,1);
+  }
+  .nav-item:hover .nav-ic { background: rgba(255,255,255,0.06); transform: translateY(-1px); }
+  .nav-item.active .nav-ic {
+    background: linear-gradient(160deg, rgba(255,140,90,0.18) 0%, rgba(255,140,90,0.06) 100%);
+    box-shadow: 0 0 0 1px rgba(255,140,90,0.20) inset;
+  }
+  .nav-item svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .nav-spacer { flex: 1; }
+
+  /* ---------- Main ---------- */
+  .main {
+    grid-area: main;
+    overflow-y: auto;
+    padding: 20px 24px 32px;
+    display: flex; flex-direction: column; gap: 14px;
+    position: relative;
+  }
+  .main::-webkit-scrollbar { width: 10px; }
+  .main::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.08); border-radius: 5px;
+    border: 2px solid transparent; background-clip: padding-box;
+  }
+  .main::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,0.18); }
+
+  /* ---------- Views (tab pages) ---------- */
+  .view {
+    display: none;
+    flex-direction: column;
+    gap: 14px;
+    animation: viewIn 0.36s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .view.active { display: flex; }
+  @keyframes viewIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* greeting (home only) */
+  .greeting {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 4px;
+    animation: enter 0.5s 0.05s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .greeting h1 {
+    margin: 0; font-size: 22px; font-weight: 600;
+    letter-spacing: -0.01em;
+    background: linear-gradient(135deg, var(--text) 0%, var(--text-soft) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .greeting .sub {
+    font-size: 11.5px; color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+  @keyframes enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Section title (other tabs) */
+  .section-title {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    background: linear-gradient(135deg, var(--text) 0%, var(--text-soft) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: enter 0.4s cubic-bezier(0.16,1,0.3,1) both;
+  }
+
+  /* ---------- Cards base ---------- */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 18px 20px;
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.25s cubic-bezier(0.16,1,0.3,1),
+                box-shadow 0.25s ease,
+                border-color 0.2s ease;
+  }
+  .card.flat:hover { transform: none; }
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-hover);
+  }
+  .card h3 {
+    margin: 0; font-size: 15px; font-weight: 600;
+    letter-spacing: 0.005em;
+  }
+
+  /* ---------- Tip card ---------- */
+  .tip-card {
+    background: var(--bg-tip);
+    border: 1px solid rgba(255,255,255,0.10);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 16px;
+    align-items: center;
+    padding: 16px 20px;
+    min-height: 84px;
+    animation: enter 0.5s 0.10s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .tip-card .bulb {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #ffe28a 0%, var(--penguin-yellow) 60%, #d4a02a 100%);
+    display: grid; place-items: center; flex-shrink: 0;
+    box-shadow:
+      0 0 22px rgba(255,209,106,0.55),
+      0 0 0 4px rgba(255,255,255,0.10) inset,
+      0 -2px 0 rgba(0,0,0,0.20) inset;
+    animation: bulbPulse 4s ease-in-out infinite;
+  }
+  @keyframes bulbPulse {
+    0%, 100% { box-shadow: 0 0 22px rgba(255,209,106,0.55), 0 0 0 4px rgba(255,255,255,0.10) inset, 0 -2px 0 rgba(0,0,0,0.20) inset; }
+    50%      { box-shadow: 0 0 32px rgba(255,209,106,0.80), 0 0 0 4px rgba(255,255,255,0.10) inset, 0 -2px 0 rgba(0,0,0,0.20) inset; }
+  }
+  .tip-card .bulb svg { width: 22px; height: 22px; color: #5a3700; stroke-width: 2.2; }
+  .tip-card .tip-text h3 { font-size: 14px; margin: 0 0 4px; color: #fff; }
+  .tip-card .tip-text p { font-size: 12px; color: rgba(255,255,255,0.78); margin: 0; line-height: 1.45; }
+  .tip-card .tip-text a {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--ice); font-size: 12px; font-weight: 500;
+    text-decoration: none; margin-top: 6px;
+    transition: color 0.15s ease;
+  }
+  .tip-card .tip-text a:hover { color: #a8e8f5; }
+  .tip-card .tip-cta {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(255,255,255,0.10);
+    display: grid; place-items: center;
+    color: #fff; cursor: pointer;
+    transition: background 0.15s ease, transform 0.2s ease;
+  }
+  .tip-card .tip-cta:hover { background: rgba(255,255,255,0.20); transform: scale(1.08); }
+  .tip-card .tip-cta svg { width: 12px; height: 12px; }
+
+  /* ---------- Boost card ---------- */
+  .boost-card {
+    padding: 20px;
+    animation: enter 0.5s 0.15s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .boost-head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 14px;
+  }
+  .boost-head .ic {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(160deg, rgba(255,140,90,0.25), rgba(255,140,90,0.08));
+    color: var(--penguin-orange);
+    display: grid; place-items: center;
+    box-shadow: 0 0 0 1px rgba(255,140,90,0.20) inset;
+  }
+  .boost-head .ic svg { width: 18px; height: 18px; }
+  .boost-head h3 { flex: 1; margin: 0; font-size: 15px; }
+  .boost-head .smart {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--ice); font-size: 12px; font-weight: 500;
+    cursor: pointer; padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+  }
+  .boost-head .smart:hover { background: rgba(123,215,240,0.10); }
+  .boost-head .smart .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--ice);
+    display: grid; place-items: center;
+    color: var(--bg-deep);
+  }
+  .boost-head .smart .dot svg { width: 9px; height: 9px; }
+  .boost-desc { color: var(--text-soft); font-size: 12px; margin: 0 0 16px; }
+  .boost-stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 22px;
+    margin-bottom: 18px;
+  }
+  .boost-stat .label {
+    font-size: 11px; color: var(--text-dim);
+    margin-bottom: 6px; letter-spacing: 0.04em; text-transform: uppercase;
+    font-weight: 500;
+  }
+  .boost-stat .value {
+    font-size: 22px; font-weight: 600;
+    margin-bottom: 8px;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(135deg, var(--text) 0%, var(--text-soft) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .boost-stat .bar {
+    height: 6px; border-radius: var(--r-pill);
+    background: rgba(255,255,255,0.06);
+    overflow: hidden; position: relative;
+  }
+  .boost-stat .bar > i {
+    display: block; height: 100%;
+    background: var(--boost-bar);
+    border-radius: var(--r-pill);
+    transition: width 0.6s cubic-bezier(0.16,1,0.3,1);
+    box-shadow: 0 0 10px rgba(255,140,90,0.50);
+    position: relative;
+  }
+  .boost-stat .bar > i::after {
+    content: ""; position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.30) 50%, transparent 100%);
+    animation: shimmer 2.5s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .boost-btn {
+    width: 100%;
+    background: linear-gradient(180deg, #ffb38a 0%, var(--penguin-orange) 60%, #ff6b6b 100%);
+    color: #fff; border: 0; padding: 12px;
+    font: inherit; font-size: 13px; font-weight: 600;
+    border-radius: var(--r-button); cursor: pointer;
+    letter-spacing: 0.02em;
+    box-shadow:
+      0 6px 18px rgba(255,140,90,0.40),
+      0 1px 0 rgba(255,255,255,0.25) inset,
+      0 -1px 0 rgba(0,0,0,0.20) inset;
+    transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.15s ease;
+    position: relative; overflow: hidden;
+  }
+  .boost-btn::before {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.30) 50%, transparent 70%);
+    transform: translateX(-100%);
+    transition: transform 0.6s ease;
+  }
+  .boost-btn:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 8px 24px rgba(255,140,90,0.55), 0 1px 0 rgba(255,255,255,0.30) inset, 0 -1px 0 rgba(0,0,0,0.20) inset;
+  }
+  .boost-btn:hover::before { transform: translateX(100%); }
+  .boost-btn:active { transform: translateY(1px); }
+
+  /* ---------- Mini cards grid (home) ---------- */
+  .row2 {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  .row2 .card { animation: enter 0.5s 0.20s cubic-bezier(0.16,1,0.3,1) both; }
+  .row2 .card:nth-child(2) { animation-delay: 0.25s; }
+
+  .mini-card { display: flex; flex-direction: column; gap: 8px; min-height: 110px; }
+  .mini-card .head { display: flex; align-items: center; gap: 8px; }
+  .mini-card .head h3 { margin: 0; font-size: 14px; flex: 1; }
+  .mini-card .head .ic {
+    width: 30px; height: 30px; border-radius: 8px;
+    display: grid; place-items: center;
+    background: rgba(255,255,255,0.04);
+    color: var(--text-soft);
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .mini-card:hover .head .ic { background: rgba(255,255,255,0.08); color: var(--text); }
+  .mini-card .head .ic svg { width: 16px; height: 16px; }
+  .mini-card .desc { color: var(--text-dim); font-size: 11px; margin: 0; letter-spacing: 0.02em; }
+  .mini-card .desc strong { color: var(--ice); font-weight: 500; font-family: var(--font-num); font-size: 11.5px; }
+
+  .mini-bar {
+    height: 4px; border-radius: var(--r-pill);
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .mini-bar > i {
+    display: block; height: 100%; border-radius: var(--r-pill);
+    transition: width 0.6s cubic-bezier(0.16,1,0.3,1);
+  }
+  .mini-bar.peach > i  { background: linear-gradient(90deg, var(--penguin-peach), var(--penguin-orange)); box-shadow: 0 0 8px rgba(255,140,90,0.50); }
+  .mini-bar.ice   > i  { background: linear-gradient(90deg, var(--ice), #4FC3F7); box-shadow: 0 0 8px rgba(123,215,240,0.50); }
+  .mini-bar.mint  > i  { background: linear-gradient(90deg, var(--mint), #5BCFA0); box-shadow: 0 0 8px rgba(127,227,184,0.50); }
+  .mini-bar.rose  > i  { background: linear-gradient(90deg, var(--rose), #ff7a9b); box-shadow: 0 0 8px rgba(255,158,181,0.50); }
+  .mini-bar.lav   > i  { background: linear-gradient(90deg, var(--lavender), #9a7fff); box-shadow: 0 0 8px rgba(184,158,255,0.50); }
+
+  /* ---------- Home CTA card ---------- */
+  .cta-card {
+    display: grid; grid-template-columns: 1fr auto; gap: 18px;
+    align-items: center;
+    padding: 16px 20px;
+    animation: enter 0.5s 0.30s cubic-bezier(0.16,1,0.3,1) both;
+    background: linear-gradient(160deg, rgba(123,215,240,0.10) 0%, rgba(184,158,255,0.06) 100%), var(--bg-card);
+    border-color: rgba(123,215,240,0.18);
+  }
+  .cta-left { display: flex; align-items: center; gap: 14px; }
+  .cta-icon {
+    width: 42px; height: 42px; border-radius: 11px;
+    background: linear-gradient(160deg, rgba(123,215,240,0.25), rgba(184,158,255,0.15));
+    display: grid; place-items: center;
+    color: var(--ice);
+    box-shadow: 0 0 0 1px rgba(123,215,240,0.25) inset;
+    flex-shrink: 0;
+  }
+  .cta-icon svg { width: 22px; height: 22px; }
+  .cta-text h3 { margin: 0; font-size: 14px; }
+  .cta-text p { margin: 2px 0 0; color: var(--text-soft); font-size: 11.5px; letter-spacing: 0.01em; }
+  .capture-btn {
+    background: rgba(255,255,255,0.08);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    padding: 9px 22px;
+    font: inherit; font-size: 12px; font-weight: 500;
+    border-radius: 8px; cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    letter-spacing: 0.02em;
+  }
+  .capture-btn:hover {
+    background: rgba(255,255,255,0.14);
+    border-color: rgba(255,255,255,0.20);
+    transform: translateY(-1px);
+  }
+  .capture-btn:active { transform: translateY(0); }
+
+  /* Subtle ribbon on card hover */
+  .card::after {
+    content: ""; position: absolute;
+    top: 0; left: 10%; right: 10%; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent);
+    transition: opacity 0.2s ease;
+    opacity: 0.6;
+  }
+
+  /* corner micro-decoration on tip card */
+  .deco {
+    position: absolute; right: -16px; top: -16px;
+    width: 140px; height: 140px;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.10) 0%, transparent 60%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  /* ============================================
+     LIST ROWS — Protection / Storage / Apps
+     ============================================ */
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 6px 10px;
+    box-shadow: var(--shadow-card);
+    display: flex; flex-direction: column;
+    transition: border-color 0.2s ease, box-shadow 0.25s ease;
+  }
+  .panel:hover { border-color: var(--border-strong); }
+  .panel::after { display: none; }
+
+  .list-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background 0.15s ease;
+  }
+  .list-row:last-child { border-bottom: 0; }
+  .list-row:hover { background: rgba(255,255,255,0.03); }
+
+  .list-row .ic {
+    width: 36px; height: 36px;
+    display: grid; place-items: center;
+    border-radius: 9px;
+    background: rgba(255,255,255,0.04);
+    color: var(--text-soft);
+    flex-shrink: 0;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .list-row:hover .ic {
+    background: rgba(255,255,255,0.08);
+    color: var(--text);
+  }
+  .list-row .ic svg { width: 18px; height: 18px; }
+
+  .list-row .text { flex: 1; min-width: 0; }
+  .list-row .text h4 {
+    margin: 0 0 3px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.005em;
+  }
+  .list-row .text p {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--text-soft);
+    line-height: 1.35;
+  }
+  .list-row .text p strong { font-weight: 600; color: var(--text); }
+
+  .list-row .right {
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: 6px;
+    color: var(--text-soft);
+  }
+
+  /* Action pill (Scan / Available >) */
+  .action-pill {
+    background: linear-gradient(180deg, #ffb38a 0%, var(--penguin-orange) 60%, #ff6b6b 100%);
+    color: #fff; border: 0;
+    padding: 7px 18px;
+    font: inherit; font-size: 12px; font-weight: 600;
+    border-radius: 8px; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(255,140,90,0.30), 0 1px 0 rgba(255,255,255,0.25) inset;
+    transition: filter 0.15s ease, transform 0.12s ease;
+    letter-spacing: 0.02em;
+  }
+  .action-pill:hover { filter: brightness(1.06); }
+  .action-pill:active { transform: translateY(1px); }
+
+  /* Available link */
+  .link-action {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--text-soft);
+    font-size: 12px; font-weight: 500;
+    background: transparent; border: 0;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .link-action:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+  .link-action svg { width: 14px; height: 14px; }
+
+  .chevron {
+    color: var(--text-dim);
+    display: inline-grid; place-items: center;
+  }
+  .chevron svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Dropdowns (general settings) */
+  .dropdown {
+    display: inline-flex; align-items: center; gap: 18px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font: inherit; font-size: 12px;
+    cursor: pointer;
+    min-width: 130px;
+    justify-content: space-between;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .dropdown:hover { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.20); }
+  .dropdown .chev-sm { color: var(--text-dim); }
+  .dropdown .chev-sm svg { width: 10px; height: 10px; }
+
+  /* ============================================
+     STORAGE — Disk usage card
+     ============================================ */
+  .disk-card {
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .disk-head {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .disk-head h4 { margin: 0; font-size: 13.5px; font-weight: 600; }
+  .disk-head .used {
+    font-size: 11.5px; color: var(--text-soft);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .disk-usage {
+    display: flex; height: 18px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.04);
+  }
+  .disk-usage > i { display: block; height: 100%; transition: width 0.6s ease; }
+
+  .disk-legend {
+    display: flex; flex-wrap: wrap; gap: 14px;
+    font-size: 11px; color: var(--text-soft);
+  }
+  .disk-legend .item { display: flex; align-items: center; gap: 6px; }
+  .disk-legend .item .dot {
+    width: 10px; height: 10px; border-radius: 2px;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .disk-legend .item.user    { color: var(--disk-user);    }
+  .disk-legend .item.app     { color: var(--disk-app);     }
+  .disk-legend .item.system  { color: var(--disk-system);  }
+  .disk-legend .item.recycle { color: var(--disk-recycle); }
+  .disk-legend .item.other   { color: var(--disk-other);   }
+  .disk-legend .item .dot { box-shadow: none; }
+
+  /* ============================================
+     AI TOOLS
+     ============================================ */
+  .ai-tools-section {
+    margin-top: 4px;
+  }
+  .ai-tools-section .sec-head {
+    margin: 0 4px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .panel.collapsible .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 12px;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background 0.15s ease;
+  }
+  .panel.collapsible .panel-head:hover { background: rgba(255,255,255,0.03); }
+  .panel.collapsible .panel-head h4 {
+    margin: 0; font-size: 13.5px; font-weight: 600;
+    color: var(--text);
+  }
+  .panel.collapsible .panel-head .chev-icon {
+    color: var(--text-soft); transition: transform 0.25s ease;
+  }
+  .panel.collapsible.open .panel-head .chev-icon { transform: rotate(180deg); }
+  .panel.collapsible .panel-body {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.32s cubic-bezier(0.16,1,0.3,1);
+  }
+  .panel.collapsible.open .panel-body { max-height: 600px; }
+
+  .settings-rows { display: flex; flex-direction: column; }
+  .settings-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .settings-row .ic {
+    width: 32px; height: 32px;
+    display: grid; place-items: center;
+    border-radius: 8px;
+    background: rgba(123,215,240,0.12);
+    color: var(--ice);
+    flex-shrink: 0;
+  }
+  .settings-row .ic svg { width: 16px; height: 16px; }
+  .settings-row .body { flex: 1; min-width: 0; }
+  .settings-row .body .ttl {
+    font-size: 12.5px; font-weight: 500;
+    color: var(--text); margin-bottom: 2px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .settings-row .body .info {
+    font-size: 10.5px; color: var(--text-dim);
+    display: flex; align-items: center; gap: 4px;
+    line-height: 1.4;
+  }
+  .info-ic-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    display: inline-grid; place-items: center;
+    font-size: 9px; color: var(--text-soft);
+    flex-shrink: 0;
+  }
+
+  /* Toggle switch */
+  .toggle {
+    --w: 36px; --h: 20px;
+    position: relative;
+    width: var(--w); height: var(--h);
+    background: rgba(255,255,255,0.10);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+    border: 0;
+    padding: 0;
+  }
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: calc(var(--h) - 4px); height: calc(var(--h) - 4px);
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.22s cubic-bezier(0.16,1,0.3,1);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.30);
+  }
+  .toggle.on {
+    background: linear-gradient(90deg, var(--ice), #4FC3F7);
+  }
+  .toggle.on::after {
+    transform: translateX(calc(var(--w) - var(--h)));
+  }
+
+  /* Hotkey input */
+  .hotkey {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 5px 8px 5px 12px;
+    font: inherit; font-size: 11px;
+    color: var(--text);
+    display: inline-flex; align-items: center; gap: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .hotkey:hover { background: rgba(255,255,255,0.10); }
+  .hotkey .x {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.10);
+    display: grid; place-items: center;
+    color: var(--text-soft);
+    font-size: 11px; line-height: 1;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .hotkey:hover .x { background: rgba(255,255,255,0.20); color: #fff; }
+
+  /* Tools tile grid */
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .tool-tile {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 18px 12px 14px;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 12px;
+    cursor: pointer;
+    box-shadow: var(--shadow-card);
+    transition: transform 0.18s cubic-bezier(0.16,1,0.3,1),
+                border-color 0.18s ease,
+                box-shadow 0.18s ease;
+    position: relative;
+  }
+  .tool-tile:hover {
+    transform: translateY(-3px);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-hover);
+  }
+  .tool-tile .ic {
+    width: 38px; height: 38px;
+    display: grid; place-items: center;
+    color: var(--ice);
+  }
+  .tool-tile .ic svg { width: 30px; height: 30px; }
+  .tool-tile .label {
+    font-size: 11.5px; color: var(--text-soft);
+    font-weight: 500;
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  /* Quick access links */
+  .quick-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 6px 12px;
+  }
+  .quick-head h4 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text); }
+  .add-link {
+    background: transparent;
+    border: 0; padding: 4px 8px;
+    font: inherit; font-size: 12px;
+    color: var(--ice);
+    display: inline-flex; align-items: center; gap: 6px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+  }
+  .add-link:hover { background: rgba(123,215,240,0.10); }
+  .add-link .plus {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    background: rgba(123,215,240,0.18);
+    display: inline-grid; place-items: center;
+    font-size: 13px; line-height: 1; font-weight: 600;
+  }
+
+  .quick-link {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-card);
+    transition: border-color 0.15s ease;
+  }
+  .quick-link:hover { border-color: var(--border-strong); }
+  .quick-link .ic {
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .quick-link .ic svg { width: 22px; height: 22px; color: var(--ice); }
+  .quick-link .label {
+    flex: 1; font-size: 12.5px; color: var(--text);
+  }
+  .quick-link .edit {
+    color: var(--text-dim); cursor: pointer;
+    background: transparent; border: 0;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .quick-link .edit:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+  .quick-link .edit svg { width: 14px; height: 14px; }
+
+  /* ============================================
+     RESTORE — All set screen
+     ============================================ */
+  .restore-card {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 20px;
+    padding: 80px 20px 60px;
+    text-align: center;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+  .restore-card::after { display: none; }
+  .restore-card:hover { transform: none; }
+  .restore-card .clip {
+    width: 78px; height: 92px;
+    border-radius: 10px;
+    background: linear-gradient(160deg, #4a5b88 0%, #2d3a5e 100%);
+    position: relative;
+    box-shadow:
+      0 14px 30px rgba(0,0,0,0.35),
+      0 0 0 4px rgba(255,255,255,0.06) inset,
+      0 -2px 0 rgba(0,0,0,0.25) inset;
+    display: flex; flex-direction: column;
+    padding: 12px 10px 8px;
+    gap: 6px;
+  }
+  .restore-card .clip::before {
+    content: "";
+    position: absolute; left: 50%; top: -8px;
+    transform: translateX(-50%);
+    width: 30px; height: 12px;
+    border-radius: 6px 6px 4px 4px;
+    background: linear-gradient(180deg, #4a5b88 0%, #2d3a5e 100%);
+    box-shadow: 0 -2px 0 rgba(0,0,0,0.20) inset;
+  }
+  .restore-card .clip .row {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.30);
+  }
+  .restore-card .clip .row.short { width: 70%; }
+  .restore-card .check {
+    position: absolute;
+    bottom: -10px; right: -10px;
+    width: 30px; height: 30px;
+    background: linear-gradient(160deg, var(--mint), #5BCFA0);
+    border: 3px solid var(--bg-base);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    box-shadow: 0 0 16px rgba(127,227,184,0.55);
+  }
+  .restore-card .check svg { width: 14px; height: 14px; color: #fff; stroke-width: 3; }
+  .restore-card h3 {
+    margin: 18px 0 0;
+    font-size: 18px; font-weight: 600;
+    color: var(--text);
+  }
+  .restore-card p {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-soft);
+    max-width: 280px;
+    line-height: 1.55;
+  }
+
+  /* ============================================
+     PLACEHOLDER views (Clipboard / Feedback)
+     ============================================ */
+  .placeholder-card {
+    padding: 40px 24px;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 14px;
+    text-align: center;
+  }
+  .placeholder-card .ic {
+    width: 56px; height: 56px;
+    border-radius: 14px;
+    background: rgba(123,215,240,0.12);
+    color: var(--ice);
+    display: grid; place-items: center;
+  }
+  .placeholder-card .ic svg { width: 28px; height: 28px; }
+  .placeholder-card h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .placeholder-card p { margin: 0; font-size: 12px; color: var(--text-soft); max-width: 360px; line-height: 1.55; }
+
+  /* ============================================
+     SETTINGS view
+     ============================================ */
+  .settings-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 6px 10px;
+    box-shadow: var(--shadow-card);
+    margin-bottom: 4px;
+    display: flex; flex-direction: column;
+    transition: border-color 0.2s ease, box-shadow 0.25s ease;
+  }
+  .settings-section:hover { border-color: var(--border-strong); }
+  .settings-section::after { display: none; }
+
+  .settings-section .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 12px;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background 0.15s ease;
+  }
+  .settings-section .panel-head:hover { background: rgba(255,255,255,0.03); }
+  .settings-section .panel-head h4 {
+    margin: 0; font-size: 13.5px; font-weight: 600;
+    color: var(--text);
+  }
+  .settings-section .panel-head .chev-icon {
+    color: var(--text-soft); transition: transform 0.25s ease;
+  }
+  .settings-section.open .panel-head .chev-icon { transform: rotate(180deg); }
+  .settings-section .panel-body {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.34s cubic-bezier(0.16,1,0.3,1);
+  }
+  .settings-section.open .panel-body { max-height: 800px; }
+
+  .settings-section .settings-row .body .ttl {
+    font-size: 13px; font-weight: 600;
+    color: var(--text); margin-bottom: 4px;
+  }
+  .settings-section .settings-row .body .sub {
+    font-size: 11.5px; color: var(--text-soft); line-height: 1.5;
+    margin: 0;
+  }
+  .settings-section .settings-row .body .sub a {
+    color: var(--ice); text-decoration: none;
+    cursor: pointer;
+  }
+  .settings-section .settings-row .body .sub a:hover { text-decoration: underline; }
+
+  .section-note {
+    display: flex; gap: 10px;
+    padding: 8px 12px 14px;
+    font-size: 11.5px; color: var(--text-soft);
+    border-top: 1px solid var(--border);
+    line-height: 1.5;
+  }
+  .section-note .info-ic-dot {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.10);
+    display: inline-grid; place-items: center;
+    font-size: 9px; color: var(--text-dim);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .preview-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 0 16px;
+    gap: 14px;
+  }
+  .preview-foot .hint { font-size: 11px; color: var(--text-soft); }
+  .preview-foot .signin {
+    background: linear-gradient(180deg, #ffb38a 0%, var(--penguin-orange) 100%);
+    color: #fff;
+    border: 0;
+    padding: 7px 18px;
+    border-radius: 8px;
+    font: inherit; font-size: 11.5px; font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(255,140,90,0.30);
+    transition: filter 0.15s ease, transform 0.12s ease;
+  }
+  .preview-foot .signin:hover { filter: brightness(1.06); }
+  .preview-foot .signin:active { transform: translateY(1px); }
+
+  /* Better spacing of note text in collapse body */
+  .settings-section .panel-body .settings-row:last-child {
+    border-bottom: 0;
+  }
+</style>
+<link rel="stylesheet" href="manager-integration.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="grain"></div>
+
+  <div class="app">
+    <!-- Title bar -->
+    <div class="titlebar">
+      <div class="brand">
+        <svg class="penguin" viewBox="0 0 32 32" fill="none">
+          <defs>
+            <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#3a4358"/>
+              <stop offset="100%" stop-color="#1a1f2a"/>
+            </linearGradient>
+            <linearGradient id="belly" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#ffffff"/>
+              <stop offset="100%" stop-color="#e8eaee"/>
+            </linearGradient>
+            <linearGradient id="beak" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#ffd16a"/>
+              <stop offset="100%" stop-color="#ff8c5a"/>
+            </linearGradient>
+          </defs>
+          <ellipse cx="16" cy="17" rx="10" ry="11" fill="url(#body)"/>
+          <ellipse cx="16" cy="18" rx="6.5" ry="8" fill="url(#belly)"/>
+          <ellipse cx="13" cy="9" rx="1.4" ry="1.6" fill="rgba(255,255,255,0.10)"/>
+          <circle cx="12.5" cy="11" r="1.4" fill="#fff"/>
+          <circle cx="19.5" cy="11" r="1.4" fill="#fff"/>
+          <circle cx="13" cy="11.2" r="0.7" fill="#0c1118"/>
+          <circle cx="20" cy="11.2" r="0.7" fill="#0c1118"/>
+          <path d="M13.5 13.5 L16 15.5 L18.5 13.5 L16 13 Z" fill="url(#beak)"/>
+          <ellipse cx="12.5" cy="27" rx="2.5" ry="1.2" fill="url(#beak)"/>
+          <ellipse cx="19.5" cy="27" rx="2.5" ry="1.2" fill="url(#beak)"/>
+          <circle cx="10.5" cy="14" r="1.2" fill="rgba(255,140,90,0.18)"/>
+          <circle cx="21.5" cy="14" r="1.2" fill="rgba(255,140,90,0.18)"/>
+        </svg>
+        <span>Penguin PC Manager</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="win-btns">
+        <div class="win-btn"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 4h6"/></svg></div>
+        <div class="win-btn"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="5" height="5"/></svg></div>
+        <div class="win-btn close"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="nav-item active" data-view="view-home">
+        <div class="nav-ic">
+          <svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10a2 2 0 0 1-2 2h-4v-7H10v7H5a2 2 0 0 1-2-2V11z"/></svg>
+        </div>
+        <span>Home</span>
+      </div>
+      <div class="nav-item" data-view="view-protection">
+        <div class="nav-ic">
+          <svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/></svg>
+        </div>
+        <span>Protection</span>
+      </div>
+      <div class="nav-item" data-view="view-storage">
+        <div class="nav-ic">
+          <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+        </div>
+        <span>Storage</span>
+      </div>
+      <div class="nav-item" data-view="view-apps">
+        <div class="nav-ic">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        </div>
+        <span>Apps</span>
+      </div>
+      <div class="nav-item" data-view="view-ai">
+        <div class="nav-ic">
+          <svg viewBox="0 0 24 24"><path d="M12 3l2 5h5l-4 3 1.5 5L12 13l-4.5 3L9 11 5 8h5z"/></svg>
+        </div>
+        <span>AI Tools</span>
+      </div>
+      <div class="nav-item" data-view="view-restore">
+        <div class="nav-ic">
+          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 12l4-2M3 12l2 4"/></svg>
+        </div>
+        <span>Restore</span>
+      </div>
+      <div class="nav-item" data-view="view-clipboard">
+        <div class="nav-ic">
+          <svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.5 8.5 0 1 1 7-14"/><path d="M8 12l3 3 5-7"/></svg>
+        </div>
+        <span>Clipboard</span>
+      </div>
+      <div class="nav-spacer"></div>
+      <div class="nav-item" data-view="view-settings">
+        <div class="nav-ic">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </div>
+        <span>Settings</span>
+      </div>
+      <div class="nav-item" data-view="view-feedback">
+        <div class="nav-ic">
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <span>Feedback</span>
+      </div>
+    </div>
+
+    <!-- Main -->
+    <div class="main">
+
+      <!-- ============================================
+           VIEW: HOME
+           ============================================ -->
+      <div class="view active" id="view-home">
+        <div class="greeting">
+          <h1>Good afternoon, friend 🐧</h1>
+          <span class="sub" id="clock">—</span>
+        </div>
+
+        <!-- Tip card -->
+        <div class="card tip-card">
+          <div class="bulb">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1.2 2 .1.6.6 1.1 1.3 1.1h2c.7 0 1.2-.5 1.3-1.1.2-.8.6-1.5 1.2-2A6 6 0 0 0 12 3z"/>
+            </svg>
+          </div>
+          <div class="tip-text">
+            <h3>Keep your files protected and backed up</h3>
+            <p>With your files in OneDrive cloud storage, you don't have to worry about losing them if something…</p>
+            <a href="#">Discover more tips ›</a>
+          </div>
+          <div class="tip-cta" title="Dismiss">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+          </div>
+          <div class="deco"></div>
+        </div>
+
+        <!-- Boost -->
+        <div class="card boost-card">
+          <div class="boost-head">
+            <div class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13 2L4 14h7l-1 8 9-12h-7z"/>
+              </svg>
+            </div>
+            <h3>PC boost</h3>
+            <div class="smart">
+              <div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></div>
+              Set Smart boost
+            </div>
+          </div>
+          <p class="boost-desc">Free up resources to help your PC run faster</p>
+          <div class="boost-stats">
+            <div class="boost-stat">
+              <div class="label">Memory usage</div>
+              <div class="value" id="memVal">36%</div>
+              <div class="bar"><i id="memBar" style="width:36%"></i></div>
+            </div>
+            <div class="boost-stat">
+              <div class="label">Temporary files</div>
+              <div class="value" id="tmpVal">9KB</div>
+              <div class="bar"><i id="tmpBar" style="width:4%"></i></div>
+            </div>
+          </div>
+          <button class="boost-btn">Boost now</button>
+        </div>
+
+        <!-- Mini cards row 1 -->
+        <div class="row2">
+          <div class="card mini-card">
+            <div class="head">
+              <h3>Health check</h3>
+              <div class="ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+              </div>
+            </div>
+            <p class="desc">Last check</p>
+            <p class="desc"><strong>2 days ago</strong></p>
+            <div class="mini-bar peach"><i style="width: 84%"></i></div>
+          </div>
+          <div class="card mini-card">
+            <div class="head">
+              <h3>Running processes</h3>
+              <div class="ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="14" rx="2"/>
+                  <path d="M3 10h18M8 4v14"/>
+                </svg>
+              </div>
+            </div>
+            <p class="desc">In progress</p>
+            <p class="desc"><strong>17 Apps</strong></p>
+            <div class="mini-bar ice"><i id="procBar" style="width: 38%"></i></div>
+          </div>
+        </div>
+
+        <!-- Mini cards row 2 -->
+        <div class="row2">
+          <div class="card mini-card">
+            <div class="head">
+              <h3>Deep cleanup</h3>
+              <div class="ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 4l6 6-10 10H4v-6z"/>
+                </svg>
+              </div>
+            </div>
+            <p class="desc">Local Disk (C:)</p>
+            <p class="desc"><strong>390.6 / 464.9 GB</strong></p>
+            <div class="mini-bar rose"><i style="width: 84%"></i></div>
+          </div>
+          <div class="card mini-card">
+            <div class="head">
+              <h3>Startup apps</h3>
+              <div class="ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 3a4 4 0 0 0-4 4v4l-3 3h-2v6h6v-2l3-3h4V3z"/>
+                </svg>
+              </div>
+            </div>
+            <p class="desc">Manage startup items in</p>
+            <p class="desc"><strong>System settings</strong></p>
+            <div class="mini-bar mint"><i style="width: 28%"></i></div>
+          </div>
+        </div>
+
+        <!-- CTA card -->
+        <div class="card cta-card">
+          <div class="cta-left">
+            <div class="cta-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M8 12c0-2 2-4 4-4s4 2 4 4"/>
+                <circle cx="12" cy="12" r="1.5"/>
+              </svg>
+            </div>
+            <div class="cta-text">
+              <h3>Circle to Act</h3>
+              <p>OCR · Image translate · Smart copy to PPT</p>
+            </div>
+          </div>
+          <button class="capture-btn">Capture</button>
+        </div>
+      </div>
+
+      <!-- ============================================
+           VIEW: PROTECTION
+           ============================================ -->
+      <div class="view" id="view-protection">
+        <h2 class="section-title">System protection</h2>
+
+        <div class="panel">
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+            </div>
+            <div class="text">
+              <h4>Virus &amp; threat protection</h4>
+              <p>Scan threats with Windows Security</p>
+            </div>
+            <div class="right">
+              <button class="action-pill">Scan</button>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+            </div>
+            <div class="text">
+              <h4>Windows update</h4>
+              <p><strong>Updated:</strong> 6/29/2026 8:48 PM</p>
+            </div>
+            <div class="right">
+              <button class="link-action">Available
+                <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+            </div>
+            <div class="text">
+              <h4>Default browser settings</h4>
+              <p>Current settings: <strong>Comet</strong></p>
+            </div>
+            <div class="right">
+              <button class="link-action" title="Open in browser">
+                <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M10 6H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="2" rx="1"/><rect x="3" y="11" width="14" height="2" rx="1"/><rect x="3" y="15" width="10" height="2" rx="1"/></svg>
+            </div>
+            <div class="text">
+              <h4>Taskbar repair</h4>
+              <p>Restore taskbar appearance</p>
+            </div>
+            <div class="right">
+              <span class="chevron"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M5 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/><path d="M9 13l2 2 4-4"/></svg>
+            </div>
+            <div class="text">
+              <h4>Restore default apps</h4>
+              <p>Reset default apps to open files and links</p>
+            </div>
+            <div class="right">
+              <span class="chevron"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="14" rx="2"/><path d="M4 8h16M8 4v14"/></svg>
+            </div>
+            <div class="text">
+              <h4>Pop-up management</h4>
+              <p>Block pop-up windows in apps</p>
+            </div>
+            <div class="right">
+              <span class="chevron"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1.2"/></svg>
+            </div>
+            <div class="text">
+              <h4>Network check</h4>
+              <p>Network speed test &amp; troubleshooting</p>
+            </div>
+            <div class="right">
+              <span class="chevron"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================
+           VIEW: STORAGE
+           ============================================ -->
+      <div class="view" id="view-storage">
+        <h2 class="section-title">Storage management</h2>
+
+        <div class="panel">
+          <!-- Disk usage overview -->
+          <div class="list-row" style="cursor:default;">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="7" cy="19" r="1"/><circle cx="11" cy="19" r="1"/><path d="M3 9h18"/></svg>
+            </div>
+            <div class="text" style="display:flex; flex-direction:column; gap:10px;">
+              <div class="disk-card">
+                <div class="disk-head">
+                  <h4>Local Disk (C:)</h4>
+                  <span class="used">Used 368.8GB / 464.9GB</span>
+                </div>
+                <div class="disk-usage">
+                  <i style="width:42%; background:var(--disk-user)"></i>
+                  <i style="width:12%; background:var(--disk-app)"></i>
+                  <i style="width:18%; background:var(--disk-system)"></i>
+                  <i style="width:4%;  background:var(--disk-recycle)"></i>
+                  <i style="width:5%;  background:var(--disk-other)"></i>
+                </div>
+                <div class="disk-legend">
+                  <div class="item user"><span class="dot" style="background:var(--disk-user)"></span> User Files</div>
+                  <div class="item app"><span class="dot" style="background:var(--disk-app)"></span> Application Files</div>
+                  <div class="item system"><span class="dot" style="background:var(--disk-system)"></span> System Files</div>
+                  <div class="item recycle"><span class="dot" style="background:var(--disk-recycle)"></span> Recycle Bin</div>
+                  <div class="item other"><span class="dot" style="background:var(--disk-other)"></span> Other</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+            </div>
+            <div class="text">
+              <h4>Disk analysis</h4>
+              <p>View what's taking up space on your drives</p>
+            </div>
+            <div class="right">
+              <span class="chevron"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M14 4l6 6-10 10H4v-6z"/></svg>
+            </div>
+            <div class="text">
+              <h4>Deep cleanup</h4>
+              <p>Perform a full cleanup scan</p>
+            </div>
+            <div class="right">
+              <button class="action-pill">Scan</button>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg>
+            </div>
+            <div class="text">
+              <h4>Downloaded files</h4>
+              <p>Manage downloaded files</p>
+            </div>
+            <div class="right">
+              <span class="chevron"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M8 13h8M8 17h6"/></svg>
+            </div>
+            <div class="text">
+              <h4>Large files</h4>
+              <p>Over <strong style="color:var(--ice)">61.4GB</strong> large files</p>
+            </div>
+            <div class="right">
+              <button class="dropdown">
+                <span>C:\</span>
+                <span class="chev-sm"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+              </button>
+              <span class="chevron"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="12" height="14" rx="1.5"/><rect x="9" y="7" width="12" height="14" rx="1.5"/></svg>
+            </div>
+            <div class="text">
+              <h4>Duplicate files</h4>
+              <p>Over <strong style="color:var(--ice)">1.4GB</strong> duplicate files</p>
+            </div>
+            <div class="right">
+              <button class="dropdown">
+                <span>All disks</span>
+                <span class="chev-sm"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+              </button>
+              <span class="chevron"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M4 6h16M6 6v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6M10 11h4"/></svg>
+            </div>
+            <div class="text">
+              <h4>Storage sense</h4>
+              <p>Automatically clean up temporary files</p>
+            </div>
+            <div class="right">
+              <button class="link-action" title="Open in settings">
+                <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M10 6H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================
+           VIEW: APPS
+           ============================================ -->
+      <div class="view" id="view-apps">
+        <h2 class="section-title">App management</h2>
+
+        <div class="panel">
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+            </div>
+            <div class="text">
+              <h4>Process management</h4>
+              <p><strong style="color:var(--ice)">15</strong> running</p>
+            </div>
+            <div class="right">
+              <span class="chevron"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7v12a2 2 0 0 0 2 2h4M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"/></svg>
+            </div>
+            <div class="text">
+              <h4>Deep uninstall</h4>
+              <p>Uninstall apps, remove leftovers and registry</p>
+            </div>
+            <div class="right">
+              <span class="chevron"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+
+          <div class="list-row">
+            <div class="ic">
+              <svg viewBox="0 0 24 24"><path d="M5 8h14l-1.5 11a2 2 0 0 1-2 1.7H8.5a2 2 0 0 1-2-1.7z"/><path d="M9 8V5a3 3 0 0 1 6 0v3"/></svg>
+            </div>
+            <div class="text">
+              <h4>Microsoft Store</h4>
+              <p>Discover apps, games, and more</p>
+            </div>
+            <div class="right">
+              <button class="link-action" title="Open Microsoft Store">
+                <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M10 6H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================
+           VIEW: AI TOOLS
+           ============================================ -->
+      <div class="view" id="view-ai">
+        <h2 class="section-title">AI Toolbox</h2>
+
+        <!-- Tools Settings collapsible -->
+        <div class="panel collapsible open">
+          <div class="panel-head">
+            <h4>Tools Settings</h4>
+            <span class="chev-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+          </div>
+          <div class="panel-body">
+            <div class="settings-rows">
+              <div class="settings-row">
+                <div class="ic">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12c0-2 2-4 4-4s4 2 4 4"/><circle cx="12" cy="12" r="1.5"/></svg>
+                </div>
+                <div class="body">
+                  <div class="ttl">
+                    Circle to Act shortcut
+                    <span class="info-ic-dot">i</span>
+                  </div>
+                  <div class="info">Trigger screen capture &amp; AI tools with one shortcut</div>
+                </div>
+                <button class="hotkey">
+                  <span>Ctrl+Shift+A</span>
+                  <span class="x">×</span>
+                </button>
+              </div>
+
+              <div class="settings-row">
+                <div class="ic">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M5 12h10M5 17h14"/></svg>
+                </div>
+                <div class="body">
+                  <div class="ttl">Text Selection Toolbar</div>
+                  <div class="info">A small toolbar appears when you select text</div>
+                </div>
+                <button class="link-action" style="font-size:11.5px;">
+                  Text-select trigger
+                  <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+              </div>
+
+              <div class="settings-row">
+                <div class="ic">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+                </div>
+                <div class="body">
+                  <div class="ttl">Show toolbar on the desktop</div>
+                  <div class="info">Display tools directly on your desktop</div>
+                </div>
+                <button class="toggle on" aria-label="Toggle"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- All Tools grid -->
+        <div class="ai-tools-section">
+          <h4 class="sec-head">All Tools</h4>
+          <div class="tools-grid">
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12c0-2 2-4 4-4s4 2 4 4"/><circle cx="12" cy="12" r="1.5"/></svg></span>
+              <span class="label">Circle to Act</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h7M7 3v2M5 3a8 8 0 0 1 0 14M11 21l4-10 4 10M12.5 18h5"/></svg></span>
+              <span class="label">Translate</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h2M7 14h6M14 14h2M7 18h4"/></svg></span>
+              <span class="label">OCR text &amp; table</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="9" cy="13" r="1.5"/><path d="M14 10l4 4M18 10l-4 4"/></svg></span>
+              <span class="label">Screenshot folder</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg></span>
+              <span class="label">Recorder</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/></svg></span>
+              <span class="label">Captions</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><path d="M8 9h6M8 13h8M8 17h5"/></svg></span>
+              <span class="label">Notepad</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h2M14 7h2M8 11h8M8 15h2M14 15h2"/></svg></span>
+              <span class="label">Calculator</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>
+              <span class="label">Edge Quick Links</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h10M3 12h14M3 18h8"/><circle cx="18" cy="18" r="4"/></svg></span>
+              <span class="label">Bing translator</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10l1 3a6 6 0 0 1-12 0z"/><circle cx="12" cy="6" r="2"/></svg></span>
+              <span class="label">Currency converter</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-1-7 5 5 0 0 1 9-2 4 4 0 0 1 3 7 4 4 0 0 1-5 2M9 19l-2 3M15 19l2 3"/></svg></span>
+              <span class="label">Weather</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5M11 8v6M8 11h6"/></svg></span>
+              <span class="label">Image search</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.5 8.5 0 1 1 7-14"/><path d="M8 12l3 3 5-7"/></svg></span>
+              <span class="label">Snipping tool</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M7 6V4h10v2M3 13h18"/></svg></span>
+              <span class="label">Screen recorder</span>
+            </button>
+            <button class="tool-tile">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4z"/><path d="M4 10h16M9 14h6"/></svg></span>
+              <span class="label">Wallpaper</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick access links -->
+        <div class="ai-tools-section">
+          <div class="quick-head">
+            <h4>Quick access links</h4>
+            <button class="add-link">
+              <span class="plus">+</span> Add link
+            </button>
+          </div>
+          <div class="quick-link">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg></span>
+            <span class="label">MSN</span>
+            <button class="edit" title="Edit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6L9 21H3v-6z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================
+           VIEW: RESTORE
+           ============================================ -->
+      <div class="view" id="view-restore">
+        <h2 class="section-title" style="margin-bottom:0;">Restore</h2>
+        <div class="restore-card">
+          <div style="position:relative; width:78px; height:92px;">
+            <div class="clip">
+              <div class="row"></div>
+              <div class="row"></div>
+              <div class="row short"></div>
+              <div class="row"></div>
+              <div class="row short"></div>
+            </div>
+            <div class="check">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+            </div>
+          </div>
+          <h3>You're all set!</h3>
+          <p>Your PC is using Microsoft recommended setting to be secure, fast and efficient.</p>
+        </div>
+      </div>
+
+      <!-- ============================================
+           VIEW: CLIPBOARD (placeholder)
+           ============================================ -->
+      <div class="view" id="view-clipboard">
+        <h2 class="section-title">Clipboard</h2>
+        <div class="card placeholder-card flat">
+          <div class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9z"/><rect x="5" y="6" width="14" height="15" rx="2"/><path d="M9 12h6M9 16h4"/></svg>
+          </div>
+          <h3>Clipboard history</h3>
+          <p>Paste frequently used text and images here for quick access across apps.</p>
+        </div>
+      </div>
+
+      <!-- ============================================
+           VIEW: SETTINGS
+           ============================================ -->
+      <div class="view" id="view-settings">
+        <h2 class="section-title">Settings</h2>
+
+        <!-- Performance Settings -->
+        <div class="settings-section open">
+          <div class="panel-head">
+            <h4>Performance Settings</h4>
+            <span class="chev-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+          </div>
+          <div class="panel-body">
+            <div class="settings-rows">
+              <div class="settings-row">
+                <div class="body" style="margin-left:46px;">
+                  <div class="ttl">Smart boost setting</div>
+                  <p class="sub">Microsoft PC Manager will automatically boost your PC when high usage of RAM or there are 1GB of temporary files</p>
+                </div>
+                <button class="toggle on" aria-label="Toggle"></button>
+              </div>
+              <div class="settings-row">
+                <div class="body" style="margin-left:46px;">
+                  <div class="ttl">Application Usage Duration</div>
+                  <p class="sub">Once enabled, you can view app types and usage trends in <a href="#">Health Check</a> to keep your PC healthy and efficient.</p>
+                </div>
+                <button class="toggle" aria-label="Toggle"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- General settings -->
+        <div class="settings-section open">
+          <div class="panel-head">
+            <h4>General settings</h4>
+            <span class="chev-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+          </div>
+          <div class="panel-body">
+            <div class="settings-rows">
+              <div class="settings-row">
+                <div class="body" style="margin-left:46px;">
+                  <div class="ttl">Start Microsoft PC Manager automatically when I sign in to Windows</div>
+                </div>
+                <button class="toggle on" aria-label="Toggle"></button>
+              </div>
+              <div class="settings-row">
+                <div class="body" style="margin-left:46px;">
+                  <div class="ttl">Appearance</div>
+                </div>
+                <button class="dropdown">
+                  <span>System</span>
+                  <span class="chev-sm"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+                </button>
+              </div>
+              <div class="settings-row">
+                <div class="body" style="margin-left:46px;">
+                  <div class="ttl">Language</div>
+                  <p class="sub" style="margin-top:2px;">Restart Microsoft PC Manager to apply language settings</p>
+                </div>
+                <button class="dropdown">
+                  <span>English (United …</span>
+                  <span class="chev-sm"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prompt settings -->
+        <div class="settings-section">
+          <div class="panel-head">
+            <h4>Prompt settings</h4>
+            <span class="chev-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+          </div>
+          <div class="panel-body">
+            <div class="settings-rows">
+              <div class="settings-row">
+                <div class="body" style="margin-left:46px;">
+                  <div class="ttl">Get safe download reminders</div>
+                  <p class="sub">Remind me when an app is available for safe download in Microsoft Store when installing software.</p>
+                </div>
+                <button class="toggle on" aria-label="Toggle"></button>
+              </div>
+              <div class="settings-row">
+                <div class="body" style="margin-left:46px;">
+                  <div class="ttl">Get reminders on downloaded documents</div>
+                  <p class="sub">Send a reminder to open a new document when it finishes downloading</p>
+                </div>
+                <button class="toggle on" aria-label="Toggle"></button>
+              </div>
+              <div class="settings-row">
+                <div class="body" style="margin-left:46px;">
+                  <div class="ttl">Uninstall residual reminder</div>
+                  <p class="sub">If there are any uninstallation residues, remind me to use deep uninstallation for cleaning</p>
+                </div>
+                <button class="toggle on" aria-label="Toggle"></button>
+              </div>
+            </div>
+            <div class="section-note">
+              <span class="info-ic-dot">i</span>
+              <span>The shortcut Windows Key + Shift + K can be used to trigger a keyboard control of reminders</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview experience -->
+        <div class="settings-section">
+          <div class="panel-head">
+            <h4>Microsoft PC Manager preview experience</h4>
+            <span class="chev-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+          </div>
+          <div class="panel-body">
+            <div class="settings-rows">
+              <div class="settings-row" style="align-items:flex-start;">
+                <div class="ic" style="margin-top:3px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><circle cx="17.5" cy="17.5" r="3.5"/></svg>
+                </div>
+                <div class="body">
+                  <div class="ttl">Try new features before they release and give feedback</div>
+                  <p class="sub">Join the Microsoft PC Manager preview experience program to explore innovative features before they are officially launched and help us improve Microsoft PC Manager. You can leave the preview program at any time.</p>
+                </div>
+              </div>
+            </div>
+            <div class="preview-foot">
+              <span class="hint">Log in Microsoft account to register for the preview experience.</span>
+              <button class="signin">Sign in</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================
+           VIEW: FEEDBACK (placeholder)
+           ============================================ -->
+      <div class="view" id="view-feedback">
+        <h2 class="section-title">Feedback</h2>
+        <div class="card placeholder-card flat">
+          <div class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>Send us your thoughts</h3>
+          <p>Spotted a bug or have a feature idea? Tell us about it and we'll make the penguin fly better 🐧.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ---------- Clock ----------
+  const clock = document.getElementById('clock');
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function update() {
+    const d = new Date();
+    const h = d.getHours();
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = ((h + 11) % 12) + 1;
+    clock.textContent = `${pad(h12)}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${ampm}`;
+  }
+  update();
+  setInterval(update, 1000);
+
+  // ---------- Greeting swap ----------
+  const greet = document.querySelector('.greeting h1');
+  const hr = new Date().getHours();
+  if (hr < 12)      greet.textContent = 'Good morning, friend 🐧';
+  else if (hr < 18) greet.textContent = 'Good afternoon, friend 🐧';
+  else              greet.textContent = 'Good evening, friend 🐧';
+
+  // ---------- Animate memory + temp + processes ----------
+  let mem = 36, memTarget = 36, tmp = 9, proc = 38;
+  function tick() {
+    if (window.penguin) return;
+    memTarget += (Math.random() - 0.5) * 1.2;
+    memTarget = Math.max(15, Math.min(78, memTarget));
+    mem += (memTarget - mem) * 0.08;
+    document.getElementById('memVal').textContent = Math.round(mem) + '%';
+    document.getElementById('memBar').style.width = mem.toFixed(1) + '%';
+
+    tmp = Math.max(2, Math.min(28, tmp + (Math.random() - 0.5) * 1.5));
+    document.getElementById('tmpVal').textContent = Math.round(tmp) + 'KB';
+    document.getElementById('tmpBar').style.width = (tmp * 2).toFixed(1) + '%';
+
+    proc = Math.max(15, Math.min(72, proc + (Math.random() - 0.5) * 2));
+    document.getElementById('procBar').style.width = proc.toFixed(1) + '%';
+
+    requestAnimationFrame(tick);
+  }
+  setTimeout(() => requestAnimationFrame(tick), 300);
+
+  // ---------- View switching ----------
+  const navItems = document.querySelectorAll('.nav-item');
+  const views = document.querySelectorAll('.view');
+  navItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const targetId = item.dataset.view;
+      if (!targetId) return;
+
+      navItems.forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+
+      views.forEach(v => v.classList.remove('active'));
+      const target = document.getElementById(targetId);
+      if (target) target.classList.add('active');
+
+      // re-trigger animation by toggling opacity
+      target.style.animation = 'none';
+      void target.offsetWidth;          // force reflow
+      target.style.animation = '';
+
+      document.querySelector('.main').scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  // ---------- Toggle switches ----------
+  document.querySelectorAll('.toggle').forEach(tg => {
+    tg.addEventListener('click', () => tg.classList.toggle('on'));
+  });
+
+  // ---------- Collapsible sections ----------
+  document.querySelectorAll('.panel-head').forEach(head => {
+    head.addEventListener('click', () => {
+      head.parentElement.classList.toggle('open');
+    });
+  });
+
+  // ---------- Boost button ripple ----------
+  document.querySelector('.boost-btn').addEventListener('click', function(e) {
+    const r = document.createElement('span');
+    const rect = this.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    const x = e.clientX - rect.left - size / 2;
+    const y = e.clientY - rect.top  - size / 2;
+    r.style.cssText = `
+      position:absolute;border-radius:50%;left:${x}px;top:${y}px;
+      width:${size}px;height:${size}px;
+      background:radial-gradient(circle,rgba(255,255,255,0.40) 0%,transparent 70%);
+      pointer-events:none;transform:scale(0);opacity:1;
+      transition:transform 0.6s ease,opacity 0.6s ease;
+    `;
+    this.appendChild(r);
+    requestAnimationFrame(() => { r.style.transform = 'scale(2.4)'; r.style.opacity = '0'; });
+    setTimeout(() => r.remove(), 600);
+
+    const memBar = document.getElementById('memBar');
+    memBar.style.width = '12%';
+    document.getElementById('memVal').textContent = '12%';
+    setTimeout(() => { memTarget = 22 + Math.random() * 10; }, 2000);
+  });
+
+  // ---------- Capture button ----------
+  document.querySelector('.capture-btn').addEventListener('click', function() {
+    this.style.transform = 'scale(0.95)';
+    setTimeout(() => this.style.transform = '', 120);
+  });
+
+  // ---------- Tip dismiss ----------
+  document.querySelector('.tip-cta').addEventListener('click', () => {
+    const tip = document.querySelector('.tip-card');
+    tip.style.transition = 'all 0.35s cubic-bezier(0.4,0,0.2,1)';
+    tip.style.opacity = '0';
+    tip.style.transform = 'translateY(-8px) scale(0.98)';
+    setTimeout(() => tip.style.display = 'none', 360);
+  });
+
+  // ---------- Dropdown placeholder toggle (visual only) ----------
+  document.querySelectorAll('.dropdown').forEach(dd => {
+    dd.addEventListener('click', e => {
+      dd.animate(
+        [{ transform: 'scale(1)' }, { transform: 'scale(0.96)' }, { transform: 'scale(1)' }],
+        { duration: 180 }
+      );
+    });
+  });
+
+  // ---------- Add link button pulse ----------
+  document.querySelectorAll('.add-link').forEach(b => {
+    b.addEventListener('click', () => {
+      b.animate(
+        [{ transform: 'scale(1)' }, { transform: 'scale(0.94)' }, { transform: 'scale(1)' }],
+        { duration: 200 }
+      );
+    });
+  });
+})();
+</script>
+<script src="manager.js"></script>
+</body>
+</html>

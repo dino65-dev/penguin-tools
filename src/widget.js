@@ -1,0 +1,52 @@
+(() => {
+  if (!window.penguin) return;
+
+  const widget = document.getElementById('widget');
+  const ring = document.getElementById('ringPct');
+  const up = document.getElementById('upVal');
+  const down = document.getElementById('downVal');
+  const menu = document.getElementById('menu');
+  const search = document.getElementById('searchInput');
+
+  function rate(value) {
+    if (!Number.isFinite(value) || value < 1) return '0B/s';
+    const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+    const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+    const amount = value / (1024 ** index);
+    return `${amount >= 10 || index === 0 ? amount.toFixed(0) : amount.toFixed(1)}${units[index]}`;
+  }
+
+  function updateStats(stats) {
+    widget.style.setProperty('--p', stats.memory);
+    ring.textContent = `${stats.memory}%`;
+    up.textContent = rate(stats.up);
+    down.textContent = rate(stats.down);
+  }
+
+  async function searchWeb() {
+    const query = search.value.trim();
+    if (query) await window.penguin.webSearch(query);
+  }
+
+  const tiles = Array.from(document.querySelectorAll('.tile'));
+  if (tiles[0]) tiles[0].addEventListener('click', () => window.penguin.openManager('view-apps'));
+  if (tiles[1]) tiles[1].addEventListener('click', () => window.penguin.openManager('view-clipboard'));
+  if (tiles[2]) tiles[2].addEventListener('click', () => window.penguin.openUrl('https://duckduckgo.com'));
+
+  search.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') searchWeb();
+  });
+  document.querySelector('.search .mag')?.addEventListener('click', searchWeb);
+
+  const menuItems = Array.from(document.querySelectorAll('.menu-item'));
+  if (menuItems[1]) menuItems[1].addEventListener('click', () => window.penguin.openManager('view-ai'));
+  if (menuItems[2]) menuItems[2].addEventListener('click', () => window.penguin.hide());
+
+  new MutationObserver(() => window.penguin.expand(menu.classList.contains('open')))
+    .observe(menu, { attributes: true, attributeFilter: ['class'] });
+
+  document.body.addEventListener('mouseenter', () => window.penguin.dockHover(true));
+  document.body.addEventListener('mouseleave', () => window.penguin.dockHover(false));
+  window.penguin.onStats(updateStats);
+  window.penguin.getStats().then(updateStats);
+})();

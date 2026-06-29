@@ -4,22 +4,26 @@ A small, mouse-first Linux desktop toolbox inspired by Microsoft PC Manager's fl
 
 ![Penguin Tools floating toolbar](docs/toolbar.png)
 
-![Penguin Tools power tools panel](docs/power-tools.png)
+![Penguin PC Manager dashboard](docs/power-tools.png)
 
 ## Features
 
-- Draggable, frameless floating toolbar with a Windows 11 / PC Manager visual style
-- Compact light and dark appearances
+- Draggable, frameless floating widget and a separate full PC Manager dashboard
+- Live memory, upload, download, search, quick tools, and menu controls in the widget
 - Snap to the left or right screen edge, retract to a 14-pixel tab, and reveal on hover
 - Select any rectangular screen area using only the mouse
 - Copy the capture directly to the system clipboard
 - Also save every capture as a PNG in `~/Pictures/Penguin Tools`
 - Live CPU, memory, download, upload, and uptime status
+- Real temporary-file estimates, filesystem usage, and Linux process counts
+- Running-process viewer with confirmed user-process termination
+- Linux update manager, software center, disk analyzer, network settings, default-app, and permission launchers
 - Quick notes saved locally
+- Current text clipboard reader/writer
 - Opens your installed Linux calculator
 - System tray controls, always-on-top toggle, and launch-at-login option
 - X11 and Wayland support through Electron's desktop-capture APIs
-- Optional BleachBit cleanup and ClamAV folder scanning from the Power Tools panel
+- Optional BleachBit cleanup and ClamAV folder scanning from the manager
 
 ## Install
 
@@ -70,7 +74,7 @@ Penguin Tools detects and integrates two established open-source Linux engines:
 - [BleachBit](https://docs.bleachbit.org/doc/command-line-interface.html) previews safe user cache, temporary-file, and trash cleanup before deletion. Cleaning requires a second explicit confirmation.
 - [ClamAV](https://docs.clamav.net/manual/Usage/Scanning.html) provides on-demand recursive scanning for any folder selected with the mouse.
 
-If either engine is missing, open **Power Tools** and click **Install engines**. Penguin Tools detects APT, DNF, Pacman, or Zypper and uses the desktop Polkit authorization dialog; no terminal command needs to be typed.
+If either engine is missing, the manager offers to install it. Penguin Tools detects APT, DNF, Pacman, or Zypper and uses the desktop Polkit authorization dialog; no terminal command needs to be typed.
 
 ## Releases
 
@@ -89,10 +93,11 @@ The AppImage and Debian package are written to `dist/`.
 
 ## Mouse-only capture flow
 
-1. Click **Screenshot** on the floating toolbar.
-2. Drag around the area you want.
-3. Click **Copy** in the selection controls.
-4. Paste into a chat, document, or image editor.
+1. Open Penguin PC Manager from the widget menu.
+2. Click **Capture** on Home, or choose **Snipping tool** in AI Tools.
+3. Drag around the area you want.
+4. Click **Copy** in the selection controls.
+5. Paste into a chat, document, or image editor.
 
 The toolbar hides before the desktop image is captured, so it is not included in the screenshot.
 

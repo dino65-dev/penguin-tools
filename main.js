@@ -18,8 +18,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
 
-const TOOLBAR_SIZE = { width: 508, height: 72 };
-const TOOLBAR_EXPANDED_HEIGHT = 342;
+const TOOLBAR_SIZE = { width: 446, height: 84 };
+const TOOLBAR_EXPANDED_HEIGHT = 310;
 const EDGE_THRESHOLD = 30;
 const EDGE_TAB_WIDTH = 14;
 const CAPTURE_DIR = path.join(app.getPath('pictures'), 'Penguin Tools');
@@ -27,14 +27,17 @@ const NOTES_FILE = path.join(app.getPath('userData'), 'notes.txt');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
 
 let toolbarWindow;
+let managerWindow;
 let captureWindow;
 let tray;
 let captureImage;
 let captureDisplay;
+let managerWasVisibleForCapture = false;
 let isQuitting = false;
 let previousCpu = readCpuTimes();
 let previousNetwork = readNetworkBytes();
 let previousNetworkAt = Date.now();
+let cachedTempBytes = 0;
 let dockSide = null;
 let dockDisplayId = null;
 let dockHideTimer;
@@ -100,7 +103,7 @@ function createToolbarWindow() {
 
   toolbarWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
   toolbarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  toolbarWindow.loadFile(path.join(__dirname, 'src', 'toolbar.html'));
+  toolbarWindow.loadFile(path.join(__dirname, 'src', 'widget.html'));
   toolbarWindow.once('ready-to-show', () => {
     toolbarWindow.showInactive();
     toolbarWindow.webContents.send('theme-update', { darkMode: settings.darkMode });
@@ -124,20 +127,71 @@ function createToolbarWindow() {
   if (process.argv.includes('--hidden')) toolbarWindow.once('ready-to-show', () => toolbarWindow.hide());
 }
 
+function createManagerWindow(initialView = 'view-home') {
+  if (managerWindow && !managerWindow.isDestroyed()) {
+    managerWindow.show();
+    managerWindow.focus();
+    managerWindow.webContents.send('manager-navigate', initialView);
+    return managerWindow;
+  }
+
+  managerWindow = new BrowserWindow({
+    width: 1040,
+    height: 780,
+    minWidth: 820,
+    minHeight: 640,
+    frame: false,
+    transparent: false,
+    show: false,
+    backgroundColor: '#0c1118',
+    title: 'Penguin PC Manager',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  managerWindow.loadFile(path.join(__dirname, 'src', 'manager.html'));
+  managerWindow.once('ready-to-show', () => {
+    managerWindow.show();
+    managerWindow.webContents.send('manager-navigate', initialView);
+  });
+  managerWindow.on('closed', () => { managerWindow = null; });
+  return managerWindow;
+}
+
 async function runVisualQa() {
   const qaDir = path.join(__dirname, 'work');
   await fs.promises.mkdir(qaDir, { recursive: true });
   await new Promise((resolve) => setTimeout(resolve, 700));
-  const collapsed = await toolbarWindow.webContents.capturePage();
-  await fs.promises.writeFile(path.join(qaDir, 'toolbar-collapsed.png'), collapsed.toPNG());
-  await toolbarWindow.webContents.executeJavaScript("document.getElementById('moreButton').click()", true);
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  const expanded = await toolbarWindow.webContents.capturePage();
-  await fs.promises.writeFile(path.join(qaDir, 'toolbar-expanded.png'), expanded.toPNG());
-  await toolbarWindow.webContents.executeJavaScript("document.documentElement.dataset.theme='dark'; showTab('power')", true);
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  const darkPower = await toolbarWindow.webContents.capturePage();
-  await fs.promises.writeFile(path.join(qaDir, 'toolbar-dark-power.png'), darkPower.toPNG());
+  const widget = await toolbarWindow.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'supplied-widget.png'), widget.toPNG());
+  await toolbarWindow.webContents.executeJavaScript("document.getElementById('moreBtn').click()", true);
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  const widgetMenu = await toolbarWindow.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'supplied-widget-menu.png'), widgetMenu.toPNG());
+  await toolbarWindow.webContents.executeJavaScript("document.getElementById('moreBtn').click()", true);
+  const manager = createManagerWindow('view-home');
+  if (manager.webContents.isLoading()) {
+    await new Promise((resolve) => manager.webContents.once('did-finish-load', resolve));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 3500));
+  manager.webContents.invalidate();
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const dashboard = await manager.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'supplied-manager.png'), dashboard.toPNG());
+  manager.webContents.send('manager-navigate', 'view-storage');
+  await new Promise((resolve) => setTimeout(resolve, 2200));
+  manager.webContents.invalidate();
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const storage = await manager.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'supplied-manager-storage.png'), storage.toPNG());
+  manager.webContents.send('manager-navigate', 'view-home');
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  manager.webContents.invalidate();
+  const finalHome = await manager.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'supplied-manager-final.png'), finalHome.toPNG());
   isQuitting = true;
   app.quit();
 }
@@ -179,6 +233,7 @@ function createTray() {
   tray.setToolTip('Penguin Tools');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show toolbar', click: showToolbar },
+    { label: 'Open PC Manager', click: () => createManagerWindow() },
     { label: 'Capture region', click: beginCapture },
     { label: 'Open screenshots', click: () => openCaptureFolder() },
     { type: 'separator' },
@@ -305,12 +360,59 @@ function readNetworkBytes() {
   }
 }
 
+function readDiskUsage() {
+  try {
+    const target = process.platform === 'linux' ? '/' : os.homedir();
+    const info = fs.statfsSync(target);
+    const total = Number(info.blocks) * Number(info.bsize);
+    const free = Number(info.bavail) * Number(info.bsize);
+    return { total, free, used: Math.max(0, total - free), target };
+  } catch {
+    return { total: 0, free: 0, used: 0, target: '/' };
+  }
+}
+
+function readProcessCount() {
+  if (process.platform !== 'linux') return 0;
+  try {
+    return fs.readdirSync('/proc').filter((name) => /^\d+$/.test(name)).length;
+  } catch {
+    return 0;
+  }
+}
+
+async function estimateDirectoryBytes(root, budget) {
+  if (!root || budget.entries >= budget.maxEntries) return 0;
+  let entries;
+  try { entries = await fs.promises.readdir(root, { withFileTypes: true }); } catch { return 0; }
+  let total = 0;
+  for (const entry of entries) {
+    if (budget.entries++ >= budget.maxEntries) break;
+    const entryPath = path.join(root, entry.name);
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) total += await estimateDirectoryBytes(entryPath, budget);
+    else if (entry.isFile()) {
+      try { total += (await fs.promises.stat(entryPath)).size; } catch { /* inaccessible */ }
+    }
+  }
+  return total;
+}
+
+async function refreshTempEstimate() {
+  const roots = [os.tmpdir(), path.join(os.homedir(), '.cache', 'thumbnails')];
+  const budget = { entries: 0, maxEntries: 25000 };
+  let total = 0;
+  for (const root of roots) total += await estimateDirectoryBytes(root, budget);
+  cachedTempBytes = total;
+}
+
 function systemStats() {
   const total = os.totalmem();
   const free = os.freemem();
   const now = Date.now();
   const network = readNetworkBytes();
   const elapsed = Math.max((now - previousNetworkAt) / 1000, 0.1);
+  const disk = readDiskUsage();
   const stats = {
     cpu: cpuPercent(),
     memory: Math.round(((total - free) / total) * 100),
@@ -321,6 +423,9 @@ function systemStats() {
     uptime: os.uptime(),
     hostname: os.hostname(),
     platform: `${os.type()} ${os.release()}`,
+    disk,
+    processes: readProcessCount(),
+    tempBytes: cachedTempBytes,
   };
   previousNetwork = network;
   previousNetworkAt = now;
@@ -343,6 +448,8 @@ async function beginCapture() {
   const bounds = toolbarWindow.getBounds();
   const display = screen.getDisplayNearestPoint({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 });
   toolbarWindow.hide();
+  managerWasVisibleForCapture = Boolean(managerWindow && !managerWindow.isDestroyed() && managerWindow.isVisible());
+  if (managerWasVisibleForCapture) managerWindow.hide();
   await new Promise((resolve) => setTimeout(resolve, 180));
 
   try {
@@ -385,9 +492,13 @@ async function beginCapture() {
       captureImage = null;
       captureDisplay = null;
       showToolbar();
+      if (managerWasVisibleForCapture && managerWindow && !managerWindow.isDestroyed()) managerWindow.show();
+      managerWasVisibleForCapture = false;
     });
   } catch (error) {
     showToolbar();
+    if (managerWasVisibleForCapture && managerWindow && !managerWindow.isDestroyed()) managerWindow.show();
+    managerWasVisibleForCapture = false;
     notify('Capture unavailable', error.message);
   }
 }
@@ -442,6 +553,12 @@ function notify(title, body) {
   if (Notification.isSupported()) new Notification({ title, body, silent: true }).show();
 }
 
+function broadcast(channel, payload) {
+  for (const window of [toolbarWindow, managerWindow]) {
+    if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
+  }
+}
+
 async function openCaptureFolder() {
   fs.mkdirSync(CAPTURE_DIR, { recursive: true });
   const error = await shell.openPath(CAPTURE_DIR);
@@ -469,6 +586,92 @@ function launchCalculator() {
     });
   };
   attempt(0);
+}
+
+async function launchFirst(candidates) {
+  for (const candidate of candidates) {
+    if (!await commandAvailable(candidate.command)) continue;
+    spawn(candidate.command, candidate.args || [], { detached: true, stdio: 'ignore' }).unref();
+    return { ok: true, command: candidate.command };
+  }
+  return { ok: false, error: 'No supported application was found.' };
+}
+
+async function openSystemTool(kind) {
+  const tools = {
+    updates: [
+      { command: 'gnome-software', args: ['--mode=updates'] },
+      { command: 'plasma-discover', args: ['--mode', 'update'] },
+      { command: 'update-manager' },
+      { command: 'pamac-manager', args: ['--updates'] },
+    ],
+    software: [
+      { command: 'gnome-software' },
+      { command: 'plasma-discover' },
+      { command: 'pamac-manager' },
+      { command: 'bauh' },
+    ],
+    disk: [
+      { command: 'baobab' },
+      { command: 'filelight' },
+      { command: 'qdirstat' },
+    ],
+    network: [
+      { command: 'gnome-control-center', args: ['network'] },
+      { command: 'nm-connection-editor' },
+      { command: 'systemsettings', args: ['kcm_networkmanagement'] },
+    ],
+    textEditor: [
+      { command: 'gnome-text-editor' },
+      { command: 'gedit' },
+      { command: 'kate' },
+      { command: 'xed' },
+      { command: 'mousepad' },
+    ],
+    defaultApps: [
+      { command: 'gnome-control-center', args: ['default-apps'] },
+      { command: 'systemsettings', args: ['kcm_componentchooser'] },
+    ],
+    applications: [
+      { command: 'gnome-control-center', args: ['applications'] },
+      { command: 'systemsettings', args: ['kcm_applications'] },
+    ],
+  };
+  return launchFirst(tools[kind] || []);
+}
+
+async function openExternalUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('Unsupported URL protocol.');
+    await shell.openExternal(parsed.toString());
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function readDefaultBrowser() {
+  if (process.platform !== 'linux') return 'System default';
+  try {
+    const { stdout } = await execFileAsync('xdg-settings', ['get', 'default-web-browser'], { timeout: 5000 });
+    return stdout.trim().replace(/\.desktop$/i, '') || 'System default';
+  } catch {
+    return 'System default';
+  }
+}
+
+async function listProcesses() {
+  if (process.platform !== 'linux') return [];
+  try {
+    const { stdout } = await execFileAsync('ps', ['-eo', 'pid=,comm=,%cpu=,%mem=', '--sort=-%cpu'], { timeout: 7000 });
+    return stdout.split(/\r?\n/).filter(Boolean).slice(0, 30).map((line) => {
+      const match = line.trim().match(/^(\d+)\s+(.+?)\s+([\d.]+)\s+([\d.]+)$/);
+      return match ? { pid: Number(match[1]), name: match[2], cpu: Number(match[3]), memory: Number(match[4]) } : null;
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 function execFileAsync(command, args, options = {}) {
@@ -526,7 +729,7 @@ async function runBleachBit(mode) {
 
 async function startClamScan() {
   if (!await commandAvailable('clamscan')) return { ok: false, error: 'ClamAV is not installed.' };
-  const choice = await dialog.showOpenDialog(toolbarWindow, {
+  const choice = await dialog.showOpenDialog(managerWindow || toolbarWindow, {
     title: 'Choose a folder to scan',
     buttonLabel: 'Scan this folder',
     properties: ['openDirectory'],
@@ -538,14 +741,14 @@ async function startClamScan() {
   let output = '';
   const collect = (chunk) => {
     output = `${output}${chunk}`.slice(-24000);
-    toolbarWindow?.webContents.send('security-progress', { status: 'running', target });
+    broadcast('security-progress', { status: 'running', target });
   };
   child.stdout.on('data', collect);
   child.stderr.on('data', collect);
-  child.on('error', (error) => toolbarWindow?.webContents.send('security-progress', { status: 'error', target, message: error.message }));
+  child.on('error', (error) => broadcast('security-progress', { status: 'error', target, message: error.message }));
   child.on('close', (code) => {
     const summary = output.split(/\r?\n/).filter(Boolean).slice(-14).join('\n');
-    toolbarWindow?.webContents.send('security-progress', {
+    broadcast('security-progress', {
       status: code === 0 ? 'clean' : code === 1 ? 'infected' : 'error',
       target,
       message: summary || (code === 0 ? 'No threats found.' : `Scanner exited with code ${code}.`),
@@ -571,9 +774,9 @@ async function installPowerBackends() {
 
   const child = spawn('pkexec', [selected.manager, ...selected.args], { detached: false, stdio: 'ignore' });
   child.on('close', async (code) => {
-    toolbarWindow?.webContents.send('backends-changed', { code, backends: await getBackends() });
+    broadcast('backends-changed', { code, backends: await getBackends() });
   });
-  child.on('error', (error) => toolbarWindow?.webContents.send('backends-changed', { code: -1, error: error.message }));
+  child.on('error', (error) => broadcast('backends-changed', { code: -1, error: error.message }));
   return { ok: true, manager: selected.manager };
 }
 
@@ -583,6 +786,37 @@ ipcMain.on('capture-finish', (_event, rect) => finishCapture(rect));
 ipcMain.on('capture-cancel', cancelCapture);
 ipcMain.handle('open-capture-folder', openCaptureFolder);
 ipcMain.handle('launch-calculator', launchCalculator);
+ipcMain.handle('open-manager', (_event, view) => { createManagerWindow(view || 'view-home'); return true; });
+ipcMain.handle('open-url', (_event, url) => openExternalUrl(url));
+ipcMain.handle('web-search', (_event, query) => openExternalUrl(`https://duckduckgo.com/?q=${encodeURIComponent(String(query).slice(0, 500))}`));
+ipcMain.handle('open-system-tool', (_event, kind) => openSystemTool(kind));
+ipcMain.handle('get-default-browser', readDefaultBrowser);
+ipcMain.handle('get-processes', listProcesses);
+ipcMain.handle('terminate-process', (_event, pidValue) => {
+  const pid = Number(pidValue);
+  if (process.platform !== 'linux' || !Number.isInteger(pid) || pid <= 1 || pid === process.pid) {
+    return { ok: false, error: 'That process cannot be ended.' };
+  }
+  try {
+    process.kill(pid, 'SIGTERM');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.code === 'EPERM' ? 'Permission denied for this process.' : error.message };
+  }
+});
+ipcMain.handle('read-clipboard-text', () => clipboard.readText());
+ipcMain.handle('write-clipboard-text', (_event, text) => clipboard.writeText(String(text).slice(0, 100000)));
+ipcMain.handle('open-user-folder', async (_event, kind) => {
+  const target = kind === 'downloads' ? app.getPath('downloads') : app.getPath('home');
+  const error = await shell.openPath(target);
+  return error ? { ok: false, error } : { ok: true };
+});
+ipcMain.on('manager-window', (_event, action) => {
+  if (!managerWindow) return;
+  if (action === 'minimize') managerWindow.minimize();
+  else if (action === 'maximize') managerWindow.isMaximized() ? managerWindow.unmaximize() : managerWindow.maximize();
+  else if (action === 'close') managerWindow.close();
+});
 ipcMain.handle('read-notes', async () => {
   try { return await fs.promises.readFile(NOTES_FILE, 'utf8'); } catch { return ''; }
 });
@@ -612,7 +846,7 @@ ipcMain.on('toolbar-expand', (_event, expanded) => {
   const bounds = toolbarWindow.getBounds();
   const nextHeight = expanded ? TOOLBAR_EXPANDED_HEIGHT : TOOLBAR_SIZE.height;
   const display = screen.getDisplayNearestPoint({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 });
-  const desiredY = dockSide ? bounds.y : bounds.y - (nextHeight - bounds.height);
+  const desiredY = bounds.y + bounds.height - nextHeight;
   const y = Math.max(display.workArea.y, Math.min(desiredY, display.workArea.y + display.workArea.height - nextHeight));
   setToolbarBounds({ x: bounds.x, y, width: bounds.width, height: nextHeight }, true);
   if (!expanded) scheduleDockHide(900);
@@ -631,10 +865,13 @@ ipcMain.on('quit-app', () => { isQuitting = true; app.quit(); });
 
 app.whenReady().then(() => {
   fs.mkdirSync(CAPTURE_DIR, { recursive: true });
+  refreshTempEstimate();
+  setInterval(refreshTempEstimate, 5 * 60 * 1000).unref();
   createToolbarWindow();
   createTray();
   setInterval(() => {
-    if (toolbarWindow && !toolbarWindow.isDestroyed()) toolbarWindow.webContents.send('stats-update', systemStats());
+    const stats = systemStats();
+    broadcast('stats-update', stats);
   }, 1500).unref();
 });
 

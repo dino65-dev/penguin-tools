@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Penguin PC Manager — Widget</title>
+<style>
+  :root {
+    --bg-base:        #15151a;
+    --bg-panel:       linear-gradient(180deg, rgba(58,58,66,0.92) 0%, rgba(38,38,46,0.92) 100%);
+    --bg-panel-edge:  rgba(255,255,255,0.08);
+    --bg-tile:        linear-gradient(180deg, #3f3f47 0%, #35353b 100%);
+    --bg-tile-hover:  linear-gradient(180deg, #4d4d56 0%, #3f3f47 100%);
+    --bg-search:      linear-gradient(180deg, #1c1c20 0%, #15151a 100%);
+    --bg-search-focus:linear-gradient(180deg, #141418 0%, #0e0e12 100%);
+    --bg-menu:        linear-gradient(180deg, rgba(50,50,58,0.98) 0%, rgba(38,38,46,0.98) 100%);
+    --bg-menu-hover:  rgba(255,255,255,0.06);
+    --text-primary:   #ffffff;
+    --text-secondary: rgba(255,255,255,0.62);
+    --text-dim:       rgba(255,255,255,0.42);
+    --handle:         rgba(255,255,255,0.36);
+    --accent:         #5B9BFF;
+    --accent-2:       #7BD7F0;
+    --accent-glow:    rgba(91,155,255,0.55);
+    --track:          rgba(91,155,255,0.14);
+    --up:             #6BD49A;
+    --down:           #6BA9F2;
+    --r-panel:        18px;
+    --r-tile:         10px;
+    --r-search:       12px;
+    --r-menu:         12px;
+    --font-ui: "Segoe UI Variable Display", "Segoe UI", -apple-system,
+               BlinkMacSystemFont, system-ui, sans-serif;
+    --font-mono: "Cascadia Code", "JetBrains Mono", "SF Mono", "Consolas", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; min-height: 100%;
+    background:
+      radial-gradient(1400px 700px at 30% -10%, #2c2e38 0%, transparent 55%),
+      radial-gradient(1100px 600px at 80% 110%, #1f2029 0%, transparent 50%),
+      var(--bg-base);
+    font-family: var(--font-ui); color: var(--text-primary);
+    padding: 0 24px;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    overflow: hidden;
+  }
+  body::before, body::after {
+    content: ""; position: fixed; border-radius: 50%; filter: blur(80px);
+    pointer-events: none; z-index: -1;
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  body::before {
+    width: 360px; height: 360px;
+    background: radial-gradient(circle, rgba(91,155,255,0.18) 0%, transparent 70%);
+    top: 10%; left: -100px;
+  }
+  body::after {
+    width: 280px; height: 280px;
+    background: radial-gradient(circle, rgba(123,215,240,0.14) 0%, transparent 70%);
+    bottom: 5%; right: -80px; animation-delay: -9s;
+  }
+  @keyframes drift {
+    0% { transform: translate(0,0) scale(1); }
+    50% { transform: translate(40px,30px) scale(1.1); }
+    100% { transform: translate(-30px,50px) scale(0.95); }
+  }
+  .wrap {
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    position: relative;
+    position: fixed;
+    left: 0; right: 0; bottom: 24px;
+    z-index: 100;
+  }
+  /* ============================================
+     WIDGET
+     ============================================ */
+  .widget {
+    width: 430px; padding: 10px 14px 13px;
+    border-radius: var(--r-panel);
+    background: var(--bg-panel);
+    border: 1px solid var(--bg-panel-edge);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.10) inset,
+      0 -1px 0 rgba(0,0,0,0.35) inset,
+      0 20px 50px rgba(0,0,0,0.55),
+      0 4px 12px rgba(0,0,0,0.30),
+      0 0 0 1px rgba(0,0,0,0.20);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    display: flex; flex-direction: column; gap: 7px;
+    user-select: none; -webkit-app-region: drag;
+    position: relative; overflow: visible; /* allow dropdown */
+    animation: widgetEnter 0.55s cubic-bezier(0.16,1,0.3,1) both;
+    z-index: 5;
+  }
+  @keyframes widgetEnter {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .widget::before {
+    content: ""; position: absolute;
+    top: 0; left: 8%; right: 8%; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
+    pointer-events: none; border-radius: 999px;
+  }
+  .widget::after {
+    content: ""; position: absolute;
+    top: 0; left: -40%; width: 30%; height: 100%;
+    background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.06) 50%, transparent 70%);
+    pointer-events: none; border-radius: var(--r-panel);
+    animation: sheenSweep 1.6s ease-out 0.4s 1 both;
+  }
+  @keyframes sheenSweep { from { left: -40%; } to { left: 140%; } }
+
+  .handle {
+    width: 40px; height: 4px; border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.40), rgba(255,255,255,0.22));
+    margin: 0 auto 1px; -webkit-app-region: grab;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.4) inset;
+    transition: width 0.2s ease;
+  }
+  .widget:hover .handle { width: 56px; }
+
+  .row {
+    display: flex; align-items: center; gap: 7px; height: 40px;
+  }
+  .status { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+  .ring {
+    width: 38px; height: 38px; border-radius: 50%;
+    display: grid; place-items: center; position: relative;
+    background: conic-gradient(var(--accent) 0deg,
+                               var(--accent-2) calc(var(--p) * 3.6deg * 0.6),
+                               var(--accent) calc(var(--p) * 3.6deg),
+                               var(--track) calc(var(--p) * 3.6deg) 360deg);
+    filter: drop-shadow(0 0 6px var(--accent-glow));
+    animation: ringPulse 3.4s ease-in-out infinite;
+    transition: filter 0.3s ease;
+  }
+  @keyframes ringPulse {
+    0%, 100% { filter: drop-shadow(0 0 6px var(--accent-glow)); }
+    50%      { filter: drop-shadow(0 0 10px var(--accent-glow)); }
+  }
+  .ring::before {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  .ring::after {
+    content: ""; position: absolute; inset: 3px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #3a3a40, #2a2a30);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5) inset, 0 -1px 0 rgba(255,255,255,0.04) inset;
+  }
+  .ring span {
+    position: relative; z-index: 1; font-size: 10.5px; font-weight: 600;
+    color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.55);
+    font-variant-numeric: tabular-nums;
+  }
+  .speeds {
+    display: flex; flex-direction: column; gap: 2px;
+    font-family: var(--font-mono); font-size: 10px; line-height: 1.15;
+    white-space: nowrap; font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .speeds .line {
+    display: flex; align-items: center; gap: 4px;
+    color: var(--text-secondary); letter-spacing: 0.01em;
+  }
+  .speeds .up { color: var(--up); font-size: 11px; text-shadow: 0 0 6px rgba(107,212,154,0.40); }
+  .speeds .down { color: var(--down); font-size: 11px; text-shadow: 0 0 6px rgba(107,169,242,0.40); }
+
+  .icons { display: flex; gap: 4px; flex-shrink: 0; }
+  .tile {
+    width: 32px; height: 32px; border-radius: var(--r-tile);
+    background: var(--bg-tile); border: 1px solid rgba(255,255,255,0.04);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.07) inset,
+                0 -1px 0 rgba(0,0,0,0.32) inset,
+                0 2px 4px rgba(0,0,0,0.28);
+    display: grid; place-items: center; cursor: pointer;
+    transition: transform 0.18s cubic-bezier(0.16,1,0.3,1), background 0.18s ease, box-shadow 0.18s ease;
+    -webkit-app-region: no-drag; position: relative; overflow: hidden;
+  }
+  .tile:hover {
+    background: var(--bg-tile-hover); transform: translateY(-1.5px);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.10) inset,
+                0 -1px 0 rgba(0,0,0,0.32) inset,
+                0 6px 14px rgba(0,0,0,0.45),
+                0 0 0 1px rgba(91,155,255,0.10);
+  }
+  .tile:active { transform: translateY(0) scale(0.97); }
+  .tile svg { width: 16px; height: 16px; display: block; transition: transform 0.18s ease; }
+  .tile:hover svg { transform: scale(1.08); }
+
+  .search {
+    flex: 1; height: 34px;
+    background: var(--bg-search);
+    border-radius: var(--r-search);
+    border: 1px solid rgba(255,255,255,0.04);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5) inset, 0 0 0 1px rgba(0,0,0,0.22);
+    display: flex; align-items: center; padding: 0 10px; gap: 6px;
+    min-width: 0; -webkit-app-region: no-drag;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  }
+  .search:hover {
+    border-color: rgba(255,255,255,0.07);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5) inset, 0 0 0 1px rgba(0,0,0,0.22), 0 0 0 4px rgba(91,155,255,0.05);
+  }
+  .search:focus-within {
+    background: var(--bg-search-focus);
+    border-color: rgba(91,155,255,0.50);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5) inset, 0 0 0 3px rgba(91,155,255,0.20), 0 0 14px rgba(91,155,255,0.20);
+  }
+  .search input {
+    flex: 1; min-width: 0; background: transparent; border: 0; outline: 0;
+    color: var(--text-primary); font: inherit; font-size: 12.5px; letter-spacing: 0.01em;
+  }
+  .search input::placeholder { color: var(--text-dim); letter-spacing: 0.02em; }
+  .search svg.mag { width: 12px; height: 12px; color: var(--text-secondary); flex-shrink: 0; transition: color 0.2s ease, transform 0.2s ease; }
+  .search:focus-within svg.mag { color: var(--accent); transform: scale(1.1); }
+
+  /* ============================================
+     MORE BUTTON
+     ============================================ */
+  .more-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+  .more {
+    color: var(--text-secondary); font-size: 16px; line-height: 1;
+    letter-spacing: 1.5px; cursor: pointer;
+    padding: 5px 4px; border-radius: 7px;
+    -webkit-app-region: no-drag;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    display: flex; align-items: center; gap: 3px;
+  }
+  .more:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); transform: scale(1.08); }
+  .more.open { background: rgba(91,155,255,0.18); color: var(--accent); }
+  .more span {
+    width: 3px; height: 3px; border-radius: 50%; background: currentColor;
+    animation: dot 1.4s ease-in-out infinite;
+  }
+  .more span:nth-child(2) { animation-delay: 0.15s; }
+  .more span:nth-child(3) { animation-delay: 0.30s; }
+  @keyframes dot {
+    0%, 60%, 100% { opacity: 0.5; transform: translateY(0); }
+    30%           { opacity: 1;   transform: translateY(-1.5px); }
+  }
+
+  /* ============================================
+     DROPDOWN MENU
+     ============================================ */
+  .menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    min-width: 220px;
+    background: var(--bg-menu);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: var(--r-menu);
+    padding: 6px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.06) inset,
+      0 -1px 0 rgba(0,0,0,0.40) inset,
+      0 20px 50px rgba(0,0,0,0.60),
+      0 4px 12px rgba(0,0,0,0.30);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+    transform-origin: bottom right;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.16,1,0.3,1);
+    z-index: 10;
+  }
+  .menu.open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
+  .menu::before {
+    content: ""; position: absolute;
+    top: 0; left: 12%; right: 12%; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.20), transparent);
+    border-radius: 999px;
+  }
+  .menu-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    letter-spacing: 0.01em;
+    transition: background 0.12s ease;
+    user-select: none;
+  }
+  .menu-item:hover { background: var(--bg-menu-hover); }
+  .menu-item .mi-icon {
+    width: 16px; height: 16px;
+    display: grid; place-items: center;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .menu-item .mi-icon svg { width: 14px; height: 14px; }
+  .menu-item .mi-text {
+    flex: 1; min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .menu-item .mi-icon.brand svg { width: 16px; height: 16px; }
+  .menu-item .mi-icon.penguin svg { width: 16px; height: 16px; }
+  .menu-sep {
+    height: 1px; background: rgba(255,255,255,0.06);
+    margin: 4px 8px;
+  }
+</style>
+<link rel="stylesheet" href="widget-integration.css" />
+</head>
+<body>
+
+  <div class="wrap">
+    <div class="widget" id="widget" style="--p: 30">
+      <div class="handle"></div>
+      <div class="row">
+        <div class="status">
+          <div class="ring"><span id="ringPct">30%</span></div>
+          <div class="speeds">
+            <div class="line"><span class="up">↑</span><span id="upVal">18.9KB/s</span></div>
+            <div class="line"><span class="down">↓</span><span id="downVal">16.9KB/s</span></div>
+          </div>
+        </div>
+
+        <div class="icons">
+          <div class="tile" title="Apps">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#7BD7F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="8" height="8" rx="1.6"/>
+              <rect x="13" y="3" width="8" height="8" rx="1.6"/>
+              <rect x="3" y="13" width="8" height="8" rx="1.6"/>
+              <rect x="13" y="13" width="8" height="8" rx="1.6"/>
+            </svg>
+          </div>
+          <div class="tile" title="Notes">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#E9C07A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="3" width="14" height="18" rx="2"/>
+              <path d="M9 8h6M9 12h6M9 16h4"/>
+            </svg>
+          </div>
+          <div class="tile" title="Edge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#7BD7F0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M3.5 11c2-6 8-7 13-3 1 .8 2 2 2 4-3-3-9-3-12 1"/>
+              <path d="M3.5 13c2 5 8 7 13 4"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="search" id="search">
+          <input type="text" id="searchInput" placeholder="Search the web" />
+          <svg class="mag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <circle cx="11" cy="11" r="6.5"/>
+            <path d="M20 20l-4-4"/>
+          </svg>
+        </div>
+
+        <div class="more-wrap">
+          <div class="more" id="moreBtn" title="More">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="menu" id="menu" role="menu">
+            <div class="menu-item" id="openPC">
+              <div class="mi-icon penguin">
+                <svg viewBox="0 0 32 32" fill="none">
+                  <ellipse cx="16" cy="17" rx="10" ry="11" fill="#3a4358"/>
+                  <ellipse cx="16" cy="18" rx="6.5" ry="8" fill="#f3f5f9"/>
+                  <circle cx="12.5" cy="11" r="1.4" fill="#fff"/>
+                  <circle cx="19.5" cy="11" r="1.4" fill="#fff"/>
+                  <circle cx="13" cy="11.2" r="0.7" fill="#0c1118"/>
+                  <circle cx="20" cy="11.2" r="0.7" fill="#0c1118"/>
+                  <path d="M13.5 13.5 L16 15.5 L18.5 13.5 L16 13 Z" fill="#ff8c5a"/>
+                  <ellipse cx="12.5" cy="27" rx="2.5" ry="1.2" fill="#ff8c5a"/>
+                  <ellipse cx="19.5" cy="27" rx="2.5" ry="1.2" fill="#ff8c5a"/>
+                </svg>
+              </div>
+              <span class="mi-text">Open Penguin PC Mana…</span>
+            </div>
+            <div class="menu-sep"></div>
+            <div class="menu-item">
+              <div class="mi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </div>
+              <span class="mi-text">Add tools</span>
+            </div>
+            <div class="menu-item">
+              <div class="mi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </div>
+              <span class="mi-text">Hide toolbar</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const moreBtn = document.getElementById('moreBtn');
+  const menu    = document.getElementById('menu');
+  const openPC  = document.getElementById('openPC');
+
+  function toggleMenu(show) {
+    const willShow = show ?? !menu.classList.contains('open');
+    menu.classList.toggle('open', willShow);
+    moreBtn.classList.toggle('open', willShow);
+  }
+
+  moreBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    toggleMenu();
+  });
+
+  document.addEventListener('click', e => {
+    if (!menu.contains(e.target) && !moreBtn.contains(e.target)) toggleMenu(false);
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') toggleMenu(false);
+  });
+
+  openPC.addEventListener('click', () => {
+    if (window.penguin) {
+      window.penguin.openManager('view-home');
+      toggleMenu(false);
+      return;
+    }
+    window.open('pc-manager.html', '_blank', 'width=1180,height=820');
+    toggleMenu(false);
+  });
+
+  // live data
+  const w = document.getElementById('widget');
+  const ringSpan = document.getElementById('ringPct');
+  const upVal = document.getElementById('upVal');
+  const downVal = document.getElementById('downVal');
+  let p = 30, target = 30, up = 18.9, down = 16.9;
+  const fmt = v => v < 1024 ? v.toFixed(1) + 'KB/s' : (v/1024).toFixed(2) + 'MB/s';
+  function tick() {
+    if (window.penguin) return;
+    target += (Math.random() - 0.5) * 0.6;
+    target = Math.max(8, Math.min(78, target));
+    p += (target - p) * 0.08;
+    w.style.setProperty('--p', p.toFixed(1));
+    ringSpan.textContent = Math.round(p) + '%';
+    up   = Math.max(0.1, up   + (Math.random() - 0.45) * 2.4);
+    down = Math.max(0.1, down + (Math.random() - 0.45) * 3.0);
+    upVal.textContent   = fmt(up);
+    downVal.textContent = fmt(down);
+    requestAnimationFrame(tick);
+  }
+  setTimeout(() => requestAnimationFrame(tick), 600);
+})();
+</script>
+<script src="widget.js"></script>
+</body>
+</html>
