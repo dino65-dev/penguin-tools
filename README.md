@@ -1,4 +1,4 @@
-# Penguin Tools
+# Penguin Tools [Still In Developement]
 
 A small, mouse-first Linux desktop toolbox inspired by Microsoft PC Manager's floating toolbar. It stays above other windows and gives you region screenshots, live system status, quick notes, a calculator shortcut, and a screenshot gallery without requiring keyboard shortcuts.
 
