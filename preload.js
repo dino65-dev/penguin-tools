@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('penguin', {
   getStats: () => ipcRenderer.invoke('get-stats'),
+  refreshMemory: () => ipcRenderer.invoke('refresh-memory'),
   onStats: (callback) => ipcRenderer.on('stats-update', (_event, stats) => callback(stats)),
   captureRegion: () => ipcRenderer.invoke('capture-region'),
   onCaptureImage: (callback) => ipcRenderer.on('capture-image', (_event, payload) => callback(payload)),

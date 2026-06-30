@@ -12,6 +12,7 @@ A small, mouse-first Linux desktop toolbox inspired by Microsoft PC Manager's fl
 - Live memory, upload, download, search, area capture, quick tools, and menu controls in the widget
 - Stay horizontal while floating, then snap into a vertical left/right edge layout
 - Retract to a 14-pixel glowing edge tab and reveal the vertical widget on hover
+- Click the memory ring to release unused widget memory and refresh live RAM usage safely
 - Select any rectangular screen area using only the mouse
 - Copy the capture directly to the system clipboard
 - Also save every capture as a PNG in `~/Pictures/Penguin Tools`

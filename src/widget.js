@@ -7,6 +7,8 @@
   const down = document.getElementById('downVal');
   const menu = document.getElementById('menu');
   const search = document.getElementById('searchInput');
+  const memoryRefresh = document.getElementById('memoryRefresh');
+  let refreshingMemory = false;
 
   function applyDockState(state) {
     const side = state?.side || null;
@@ -26,7 +28,7 @@
 
   function updateStats(stats) {
     widget.style.setProperty('--p', stats.memory);
-    ring.textContent = `${stats.memory}%`;
+    if (!refreshingMemory) ring.textContent = `${stats.memory}%`;
     up.textContent = rate(stats.up);
     down.textContent = rate(stats.down);
   }
@@ -35,6 +37,27 @@
     const query = search.value.trim();
     if (query) await window.penguin.webSearch(query);
     else if (document.body.classList.contains('docked')) await window.penguin.openUrl('https://duckduckgo.com');
+  }
+
+  async function refreshMemoryStatus() {
+    if (refreshingMemory) return;
+    refreshingMemory = true;
+    memoryRefresh.classList.add('refreshing');
+    memoryRefresh.setAttribute('aria-busy', 'true');
+    ring.textContent = '↻';
+    const started = Date.now();
+    try {
+      const result = await window.penguin.refreshMemory();
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, 900 - (Date.now() - started))));
+      updateStats(result.stats || await window.penguin.getStats());
+      memoryRefresh.title = `${result.message}. Linux manages and reclaims system cache automatically.`;
+    } finally {
+      refreshingMemory = false;
+      memoryRefresh.classList.remove('refreshing');
+      memoryRefresh.removeAttribute('aria-busy');
+      const stats = await window.penguin.getStats();
+      updateStats(stats);
+    }
   }
 
   const tiles = Array.from(document.querySelectorAll('.tile'));
@@ -46,6 +69,13 @@
     if (event.key === 'Enter') searchWeb();
   });
   document.querySelector('.search .mag')?.addEventListener('click', searchWeb);
+  memoryRefresh.addEventListener('click', refreshMemoryStatus);
+  memoryRefresh.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      refreshMemoryStatus();
+    }
+  });
 
   document.getElementById('addTools')?.addEventListener('click', async () => {
     menu.classList.remove('open');

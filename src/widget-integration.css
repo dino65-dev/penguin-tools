@@ -20,7 +20,14 @@ body::after { display: none; }
 .widget {
   width: 430px;
   pointer-events: auto;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: none;
+  transition: transform .38s cubic-bezier(.22, 1, .36, 1), opacity .3s ease;
 }
+
+.widget::after { display: none; }
 
 .menu,
 .tile,
@@ -32,6 +39,50 @@ body::after { display: none; }
 .handle,
 .status { -webkit-app-region: drag; }
 
+.ring {
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.ring:focus-visible {
+  outline: 2px solid rgba(123,215,240,.95);
+  outline-offset: 3px;
+}
+
+.ring.refreshing {
+  animation: memory-pulse .9s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.ring.refreshing::before {
+  inset: -4px;
+  border: 2px solid transparent;
+  border-top-color: #7bd7f0;
+  border-right-color: #5b9bff;
+  box-shadow: 0 0 12px rgba(91,155,255,.65);
+  animation: memory-spin .62s linear infinite;
+}
+
+@keyframes memory-spin { to { transform: rotate(360deg); } }
+@keyframes memory-pulse {
+  0%, 100% { transform: scale(1); }
+  45% { transform: scale(1.14); }
+}
+
+.edge-peek {
+  position: absolute;
+  top: 16px;
+  width: 10px;
+  height: 56px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #7bd7f0, #5b9bff);
+  box-shadow: 0 0 10px rgba(91,155,255,.75);
+  opacity: 0;
+  transform: scaleY(.72);
+  transition: opacity .24s ease .12s, transform .34s cubic-bezier(.22, 1, .36, 1);
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
 body.docked .wrap {
   padding: 8px;
   justify-content: center;
@@ -39,6 +90,8 @@ body.docked .wrap {
 
 body.docked-left .wrap { align-items: flex-start; }
 body.docked-right .wrap { align-items: flex-end; }
+body.docked-left .edge-peek { left: 0; }
+body.docked-right .edge-peek { right: 0; }
 
 body.docked .widget {
   width: 68px;
@@ -85,31 +138,9 @@ body.docked-right .menu {
   bottom: 0;
 }
 
-body.dock-hidden .widget {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-}
-
-body.dock-hidden .widget::before,
-body.dock-hidden .widget::after,
-body.dock-hidden .row {
-  opacity: 0;
-  pointer-events: none;
-}
-
-body.dock-hidden .handle {
-  position: absolute;
-  top: 14px;
-  width: 6px;
-  height: 52px;
-  margin: 0;
-  background: linear-gradient(180deg, #7bd7f0, #5b9bff);
-  box-shadow: 0 0 12px rgba(91,155,255,.8);
-}
-
-body.dock-hidden.docked-left .handle { right: 0; }
-body.dock-hidden.docked-right .handle { left: 0; }
+body.dock-hidden.docked-left .widget { transform: translateX(-76px) scale(.96); opacity: 0; }
+body.dock-hidden.docked-right .widget { transform: translateX(76px) scale(.96); opacity: 0; }
+body.dock-hidden .edge-peek { opacity: 1; transform: scaleY(1); pointer-events: auto; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
