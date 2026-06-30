@@ -19,6 +19,7 @@ const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
 
 const TOOLBAR_SIZE = { width: 446, height: 84 };
+const DOCKED_SIZE = { width: 84, height: 446 };
 const TOOLBAR_EXPANDED_HEIGHT = 310;
 const EDGE_THRESHOLD = 30;
 const EDGE_TAB_WIDTH = 14;
@@ -79,10 +80,10 @@ function createToolbarWindow() {
     ...TOOLBAR_SIZE,
     x,
     y,
-    minWidth: TOOLBAR_SIZE.width,
+    minWidth: DOCKED_SIZE.width,
     maxWidth: TOOLBAR_SIZE.width,
     minHeight: TOOLBAR_SIZE.height,
-    maxHeight: TOOLBAR_EXPANDED_HEIGHT,
+    maxHeight: DOCKED_SIZE.height,
     frame: false,
     transparent: true,
     resizable: false,
@@ -113,8 +114,11 @@ function createToolbarWindow() {
       dockToolbar(dockSide, savedDisplay, dockY, true);
     }
     if (process.argv.includes('--qa-screenshots')) runVisualQa();
-    else if (process.argv.includes('--qa-capture')) setTimeout(beginCapture, 700);
+    else if (process.argv.includes('--qa-capture')) setTimeout(() => {
+      toolbarWindow.webContents.executeJavaScript("document.getElementById('captureTile').click()", true);
+    }, 700);
     else if (process.argv.includes('--qa-edge')) runEdgeQa();
+    else if (process.argv.includes('--qa-tools')) runToolsQa();
   });
   toolbarWindow.on('close', (event) => {
     if (!isQuitting) {
@@ -122,6 +126,7 @@ function createToolbarWindow() {
       toolbarWindow.hide();
     }
   });
+  toolbarWindow.on('move', handleToolbarMoved);
   toolbarWindow.on('moved', handleToolbarMoved);
 
   if (process.argv.includes('--hidden')) toolbarWindow.once('ready-to-show', () => toolbarWindow.hide());
@@ -131,6 +136,7 @@ function createManagerWindow(initialView = 'view-home') {
   if (managerWindow && !managerWindow.isDestroyed()) {
     managerWindow.show();
     managerWindow.focus();
+    managerWindow.webContents.executeJavaScript(`location.hash = ${JSON.stringify(`#${initialView}`)}`);
     managerWindow.webContents.send('manager-navigate', initialView);
     return managerWindow;
   }
@@ -152,7 +158,7 @@ function createManagerWindow(initialView = 'view-home') {
       sandbox: true,
     },
   });
-  managerWindow.loadFile(path.join(__dirname, 'src', 'manager.html'));
+  managerWindow.loadFile(path.join(__dirname, 'src', 'manager.html'), { hash: initialView });
   managerWindow.once('ready-to-show', () => {
     managerWindow.show();
     managerWindow.webContents.send('manager-navigate', initialView);
@@ -201,22 +207,67 @@ async function runEdgeQa() {
   const display = screen.getPrimaryDisplay();
   const qaDir = path.join(__dirname, 'work');
   await fs.promises.mkdir(qaDir, { recursive: true });
-  dockToolbar('right', display, display.workArea.y + 100, true);
+  dockSide = null;
+  dockDisplayId = null;
+  toolbarWindow.webContents.send('dock-state', { side: null, revealed: true });
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  toolbarWindow.setBounds({
+    x: display.workArea.x + display.workArea.width - TOOLBAR_SIZE.width - 8,
+    y: display.workArea.y + 100,
+    ...TOOLBAR_SIZE,
+  });
   await new Promise((resolve) => setTimeout(resolve, 1300));
   const hidden = toolbarWindow.getBounds();
+  const hiddenImage = await toolbarWindow.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'edge-dock-hidden.png'), hiddenImage.toPNG());
   revealDock();
   await new Promise((resolve) => setTimeout(resolve, 450));
   const revealed = toolbarWindow.getBounds();
+  const revealedImage = await toolbarWindow.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'edge-dock-revealed.png'), revealedImage.toPNG());
   const expectedHiddenX = display.workArea.x + display.workArea.width - EDGE_TAB_WIDTH;
-  const expectedRevealedX = display.workArea.x + display.workArea.width - TOOLBAR_SIZE.width;
+  const expectedRevealedX = display.workArea.x + display.workArea.width - DOCKED_SIZE.width;
+  const dockClasses = await toolbarWindow.webContents.executeJavaScript('document.body.className');
   await fs.promises.writeFile(path.join(qaDir, 'edge-dock-qa.json'), JSON.stringify({
     hidden,
     revealed,
+    dockClasses,
     expectedHiddenX,
     expectedRevealedX,
-    passed: hidden.x === expectedHiddenX && revealed.x === expectedRevealedX,
+    passed: hidden.x === expectedHiddenX
+      && hidden.width === DOCKED_SIZE.width
+      && hidden.height === DOCKED_SIZE.height
+      && revealed.x === expectedRevealedX
+      && revealed.width === DOCKED_SIZE.width
+      && revealed.height === DOCKED_SIZE.height
+      && dockClasses.includes('docked-right'),
   }, null, 2));
   writeSettings(original);
+  isQuitting = true;
+  app.quit();
+}
+
+async function runToolsQa() {
+  const qaDir = path.join(__dirname, 'work');
+  await fs.promises.mkdir(qaDir, { recursive: true });
+  await toolbarWindow.webContents.executeJavaScript(`
+    document.getElementById('moreBtn').click();
+    document.getElementById('addTools').click();
+  `, true);
+  await new Promise((resolve) => setTimeout(resolve, 1400));
+  const activeView = managerWindow && !managerWindow.isDestroyed()
+    ? await managerWindow.webContents.executeJavaScript("document.querySelector('.view.active')?.id || ''")
+    : '';
+  const managerVisible = Boolean(managerWindow && !managerWindow.isDestroyed() && managerWindow.isVisible());
+  if (managerVisible) {
+    const image = await managerWindow.webContents.capturePage();
+    await fs.promises.writeFile(path.join(qaDir, 'add-tools.png'), image.toPNG());
+  }
+  await fs.promises.writeFile(path.join(qaDir, 'add-tools-qa.json'), JSON.stringify({
+    managerVisible,
+    activeView,
+    passed: managerVisible && activeView === 'view-ai',
+  }, null, 2));
   isQuitting = true;
   app.quit();
 }
@@ -268,11 +319,10 @@ function dockToolbar(side, display, preferredY, hideAfter = true) {
   dockSide = side;
   dockDisplayId = display.id;
   isDockRevealed = true;
-  const bounds = toolbarWindow.getBounds();
   const area = display.workArea;
-  const y = Math.max(area.y, Math.min(Math.round(preferredY), area.y + area.height - bounds.height));
-  const x = side === 'left' ? area.x : area.x + area.width - bounds.width;
-  setToolbarBounds({ ...bounds, x, y }, true);
+  const y = Math.max(area.y, Math.min(Math.round(preferredY), area.y + area.height - DOCKED_SIZE.height));
+  const x = side === 'left' ? area.x : area.x + area.width - DOCKED_SIZE.width;
+  setToolbarBounds({ x, y, ...DOCKED_SIZE }, true);
   toolbarWindow.webContents.send('dock-state', { side, revealed: true });
   const settings = readSettings();
   writeSettings({ ...settings, dockSide: side, dockDisplayId: display.id, dockY: y });
@@ -293,6 +343,9 @@ function handleToolbarMoved() {
     isDockRevealed = true;
     clearTimeout(dockHideTimer);
     toolbarWindow.webContents.send('dock-state', { side: null, revealed: true });
+    const x = Math.max(area.x, Math.min(bounds.x, area.x + area.width - TOOLBAR_SIZE.width));
+    const y = Math.max(area.y, Math.min(bounds.y, area.y + area.height - TOOLBAR_SIZE.height));
+    setToolbarBounds({ x, y, ...TOOLBAR_SIZE }, true);
     const settings = readSettings();
     writeSettings({ ...settings, dockSide: null, dockDisplayId: null, dockY: null });
   }
@@ -303,9 +356,10 @@ function revealDock() {
   clearTimeout(dockHideTimer);
   const area = getDockDisplay().workArea;
   const bounds = toolbarWindow.getBounds();
-  const x = dockSide === 'left' ? area.x : area.x + area.width - bounds.width;
+  const width = toolbarExpanded ? 310 : DOCKED_SIZE.width;
+  const x = dockSide === 'left' ? area.x : area.x + area.width - width;
   isDockRevealed = true;
-  setToolbarBounds({ ...bounds, x }, true);
+  setToolbarBounds({ x, y: bounds.y, width, height: DOCKED_SIZE.height }, true);
   toolbarWindow.webContents.send('dock-state', { side: dockSide, revealed: true });
 }
 
@@ -844,6 +898,14 @@ ipcMain.on('toolbar-expand', (_event, expanded) => {
   clearTimeout(dockHideTimer);
   if (dockSide && !isDockRevealed) revealDock();
   const bounds = toolbarWindow.getBounds();
+  if (dockSide) {
+    const area = getDockDisplay().workArea;
+    const width = expanded ? 310 : DOCKED_SIZE.width;
+    const x = dockSide === 'left' ? area.x : area.x + area.width - width;
+    setToolbarBounds({ x, y: bounds.y, width, height: DOCKED_SIZE.height }, true);
+    if (!expanded) scheduleDockHide(900);
+    return;
+  }
   const nextHeight = expanded ? TOOLBAR_EXPANDED_HEIGHT : TOOLBAR_SIZE.height;
   const display = screen.getDisplayNearestPoint({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 });
   const desiredY = bounds.y + bounds.height - nextHeight;
@@ -855,6 +917,7 @@ ipcMain.on('dock-hover', (_event, hovering) => {
   if (hovering) revealDock();
   else scheduleDockHide(520);
 });
+ipcMain.handle('get-dock-state', () => ({ side: dockSide, revealed: isDockRevealed }));
 ipcMain.handle('get-backends', getBackends);
 ipcMain.handle('install-backends', installPowerBackends);
 ipcMain.handle('preview-cleanup', () => runBleachBit('preview'));

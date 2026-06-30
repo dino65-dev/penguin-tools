@@ -22,14 +22,94 @@ body::after { display: none; }
   pointer-events: auto;
 }
 
-.widget,
 .menu,
 .tile,
 .search,
 .more,
 .menu-item { -webkit-app-region: no-drag; }
 
-.handle { -webkit-app-region: drag; }
+.widget,
+.handle,
+.status { -webkit-app-region: drag; }
+
+body.docked .wrap {
+  padding: 8px;
+  justify-content: center;
+}
+
+body.docked-left .wrap { align-items: flex-start; }
+body.docked-right .wrap { align-items: flex-end; }
+
+body.docked .widget {
+  width: 68px;
+  height: 430px;
+  padding: 10px 8px;
+}
+
+body.docked .row {
+  height: auto;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+body.docked .status,
+body.docked .icons {
+  flex-direction: column;
+}
+
+body.docked .speeds { display: none; }
+
+body.docked .icons { gap: 7px; }
+
+body.docked .search {
+  flex: 0 0 34px;
+  width: 34px;
+  padding: 0;
+  justify-content: center;
+}
+
+body.docked .search input { display: none; }
+body.docked .search svg.mag { width: 15px; height: 15px; }
+body.docked .more-wrap { margin-top: auto; }
+
+body.docked-left .menu {
+  left: calc(100% + 10px);
+  right: auto;
+  bottom: 0;
+  transform-origin: bottom left;
+}
+
+body.docked-right .menu {
+  right: calc(100% + 10px);
+  bottom: 0;
+}
+
+body.dock-hidden .widget {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+body.dock-hidden .widget::before,
+body.dock-hidden .widget::after,
+body.dock-hidden .row {
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.dock-hidden .handle {
+  position: absolute;
+  top: 14px;
+  width: 6px;
+  height: 52px;
+  margin: 0;
+  background: linear-gradient(180deg, #7bd7f0, #5b9bff);
+  box-shadow: 0 0 12px rgba(91,155,255,.8);
+}
+
+body.dock-hidden.docked-left .handle { right: 0; }
+body.dock-hidden.docked-right .handle { left: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
