@@ -1,6 +1,6 @@
 {
   "name": "penguin-tools",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "A Microsoft PC Manager-inspired floating toolbox for Linux",
   "desktopName": "penguin-tools",
   "main": "main.js",
@@ -12,7 +12,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "check": "node --check main.js && node --check preload.js && node --check src/widget.js && node --check src/manager.js && node --check src/capture.js",
+    "check": "node --check main.js && node --check preload.js && node --check src/widget.js && node --check src/peek.js && node --check src/manager.js && node --check src/capture.js",
     "dist:linux": "electron-builder --linux AppImage deb",
     "dist:appimage": "electron-builder --linux AppImage"
   },
