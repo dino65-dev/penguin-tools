@@ -23,6 +23,7 @@ const DOCKED_SIZE = { width: 84, height: 446 };
 const TOOLBAR_EXPANDED_HEIGHT = 310;
 const EDGE_THRESHOLD = 30;
 const EDGE_TAB_WIDTH = 14;
+const DOCK_TRANSITION_MS = 380;
 const CAPTURE_DIR = path.join(app.getPath('pictures'), 'Penguin Tools');
 const NOTES_FILE = path.join(app.getPath('userData'), 'notes.txt');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
@@ -42,6 +43,7 @@ let cachedTempBytes = 0;
 let dockSide = null;
 let dockDisplayId = null;
 let dockHideTimer;
+let dockShapeTimer;
 let isDockRevealed = true;
 let isProgrammaticMove = false;
 let toolbarExpanded = false;
@@ -119,6 +121,7 @@ function createToolbarWindow() {
     }, 700);
     else if (process.argv.includes('--qa-edge')) runEdgeQa();
     else if (process.argv.includes('--qa-tools')) runToolsQa();
+    else if (process.argv.includes('--qa-memory')) runMemoryQa();
   });
   toolbarWindow.on('close', (event) => {
     if (!isQuitting) {
@@ -216,8 +219,19 @@ async function runEdgeQa() {
     y: display.workArea.y + 100,
     ...TOOLBAR_SIZE,
   });
-  await new Promise((resolve) => setTimeout(resolve, 1300));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  const transitionUi = await toolbarWindow.webContents.executeJavaScript(`(() => {
+    const style = getComputedStyle(document.getElementById('widget'));
+    return { classes: document.body.className, opacity: Number(style.opacity), transform: style.transform };
+  })()`);
+  const transitionImage = await toolbarWindow.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'edge-dock-transition.png'), transitionImage.toPNG());
+  await new Promise((resolve) => setTimeout(resolve, 350));
   const hidden = toolbarWindow.getBounds();
+  const hiddenUi = await toolbarWindow.webContents.executeJavaScript(`(() => {
+    const peek = document.getElementById('edgePeek').getBoundingClientRect();
+    return { classes: document.body.className, peek: { x: peek.x, y: peek.y, width: peek.width, height: peek.height } };
+  })()`);
   const hiddenImage = await toolbarWindow.webContents.capturePage();
   await fs.promises.writeFile(path.join(qaDir, 'edge-dock-hidden.png'), hiddenImage.toPNG());
   revealDock();
@@ -225,19 +239,24 @@ async function runEdgeQa() {
   const revealed = toolbarWindow.getBounds();
   const revealedImage = await toolbarWindow.webContents.capturePage();
   await fs.promises.writeFile(path.join(qaDir, 'edge-dock-revealed.png'), revealedImage.toPNG());
-  const expectedHiddenX = display.workArea.x + display.workArea.width - EDGE_TAB_WIDTH;
-  const expectedRevealedX = display.workArea.x + display.workArea.width - DOCKED_SIZE.width;
+  const expectedDockX = display.workArea.x + display.workArea.width - DOCKED_SIZE.width;
   const dockClasses = await toolbarWindow.webContents.executeJavaScript('document.body.className');
   await fs.promises.writeFile(path.join(qaDir, 'edge-dock-qa.json'), JSON.stringify({
     hidden,
     revealed,
+    transitionUi,
+    hiddenUi,
     dockClasses,
-    expectedHiddenX,
-    expectedRevealedX,
-    passed: hidden.x === expectedHiddenX
+    expectedDockX,
+    passed: hidden.x === expectedDockX
       && hidden.width === DOCKED_SIZE.width
       && hidden.height === DOCKED_SIZE.height
-      && revealed.x === expectedRevealedX
+      && transitionUi.classes.includes('dock-hidden')
+      && transitionUi.opacity > 0
+      && transitionUi.opacity < 1
+      && hiddenUi.classes.includes('dock-hidden')
+      && hiddenUi.peek.x + hiddenUi.peek.width === DOCKED_SIZE.width
+      && revealed.x === expectedDockX
       && revealed.width === DOCKED_SIZE.width
       && revealed.height === DOCKED_SIZE.height
       && dockClasses.includes('docked-right'),
@@ -309,6 +328,47 @@ function setToolbarBounds(bounds, animate = false) {
   setTimeout(() => { isProgrammaticMove = false; }, animate ? 320 : 80);
 }
 
+async function runMemoryQa() {
+  const qaDir = path.join(__dirname, 'work');
+  await fs.promises.mkdir(qaDir, { recursive: true });
+  await toolbarWindow.webContents.executeJavaScript("document.getElementById('memoryRefresh').click()", true);
+  await new Promise((resolve) => setTimeout(resolve, 160));
+  const during = await toolbarWindow.webContents.executeJavaScript(`(() => {
+    const ring = document.getElementById('memoryRefresh');
+    return { refreshing: ring.classList.contains('refreshing'), busy: ring.getAttribute('aria-busy'), text: ring.textContent };
+  })()`);
+  const image = await toolbarWindow.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'memory-refresh.png'), image.toPNG());
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  const after = await toolbarWindow.webContents.executeJavaScript(`(() => {
+    const ring = document.getElementById('memoryRefresh');
+    return { refreshing: ring.classList.contains('refreshing'), busy: ring.hasAttribute('aria-busy'), text: ring.textContent, title: ring.title };
+  })()`);
+  await fs.promises.writeFile(path.join(qaDir, 'memory-refresh-qa.json'), JSON.stringify({
+    during,
+    after,
+    passed: during.refreshing && during.busy === 'true' && during.text.includes('↻')
+      && !after.refreshing && !after.busy && after.text.includes('%'),
+  }, null, 2));
+  isQuitting = true;
+  app.quit();
+}
+
+function resetDockShape() {
+  clearTimeout(dockShapeTimer);
+  if (toolbarWindow && !toolbarWindow.isDestroyed() && typeof toolbarWindow.setShape === 'function') {
+    toolbarWindow.setShape([]);
+  }
+}
+
+function applyHiddenDockShape() {
+  if (!dockSide || isDockRevealed || !toolbarWindow || toolbarWindow.isDestroyed()) return;
+  if (typeof toolbarWindow.setShape !== 'function') return;
+  const bounds = toolbarWindow.getBounds();
+  const x = dockSide === 'left' ? 0 : bounds.width - EDGE_TAB_WIDTH;
+  toolbarWindow.setShape([{ x, y: 12, width: EDGE_TAB_WIDTH, height: 64 }]);
+}
+
 function getDockDisplay() {
   return screen.getAllDisplays().find((item) => item.id === dockDisplayId)
     || screen.getDisplayNearestPoint({ x: toolbarWindow.getBounds().x, y: toolbarWindow.getBounds().y });
@@ -319,6 +379,7 @@ function dockToolbar(side, display, preferredY, hideAfter = true) {
   dockSide = side;
   dockDisplayId = display.id;
   isDockRevealed = true;
+  resetDockShape();
   const area = display.workArea;
   const y = Math.max(area.y, Math.min(Math.round(preferredY), area.y + area.height - DOCKED_SIZE.height));
   const x = side === 'left' ? area.x : area.x + area.width - DOCKED_SIZE.width;
@@ -342,6 +403,7 @@ function handleToolbarMoved() {
     dockDisplayId = null;
     isDockRevealed = true;
     clearTimeout(dockHideTimer);
+    resetDockShape();
     toolbarWindow.webContents.send('dock-state', { side: null, revealed: true });
     const x = Math.max(area.x, Math.min(bounds.x, area.x + area.width - TOOLBAR_SIZE.width));
     const y = Math.max(area.y, Math.min(bounds.y, area.y + area.height - TOOLBAR_SIZE.height));
@@ -354,6 +416,7 @@ function handleToolbarMoved() {
 function revealDock() {
   if (!dockSide || !toolbarWindow) return;
   clearTimeout(dockHideTimer);
+  resetDockShape();
   const area = getDockDisplay().workArea;
   const bounds = toolbarWindow.getBounds();
   const width = toolbarExpanded ? 310 : DOCKED_SIZE.width;
@@ -365,14 +428,10 @@ function revealDock() {
 
 function hideDock() {
   if (!dockSide || !toolbarWindow || toolbarExpanded) return;
-  const area = getDockDisplay().workArea;
-  const bounds = toolbarWindow.getBounds();
-  const x = dockSide === 'left'
-    ? area.x - bounds.width + EDGE_TAB_WIDTH
-    : area.x + area.width - EDGE_TAB_WIDTH;
   isDockRevealed = false;
-  setToolbarBounds({ ...bounds, x }, true);
   toolbarWindow.webContents.send('dock-state', { side: dockSide, revealed: false });
+  clearTimeout(dockShapeTimer);
+  dockShapeTimer = setTimeout(applyHiddenDockShape, DOCK_TRANSITION_MS);
 }
 
 function scheduleDockHide(delay = 650) {
@@ -835,6 +894,27 @@ async function installPowerBackends() {
 }
 
 ipcMain.handle('get-stats', () => systemStats());
+ipcMain.handle('refresh-memory', async () => {
+  let collected = false;
+  const contents = toolbarWindow?.webContents;
+  if (contents && !contents.isDestroyed() && !contents.debugger.isAttached()) {
+    try {
+      contents.debugger.attach('1.3');
+      await contents.debugger.sendCommand('HeapProfiler.collectGarbage');
+      collected = true;
+    } catch {
+      collected = false;
+    } finally {
+      if (contents.debugger.isAttached()) contents.debugger.detach();
+    }
+  }
+  await new Promise((resolve) => setTimeout(resolve, 180));
+  return {
+    collected,
+    stats: systemStats(),
+    message: collected ? 'Penguin Tools memory refreshed' : 'Memory status refreshed',
+  };
+});
 ipcMain.handle('capture-region', () => beginCapture());
 ipcMain.on('capture-finish', (_event, rect) => finishCapture(rect));
 ipcMain.on('capture-cancel', cancelCapture);
@@ -896,6 +976,7 @@ ipcMain.on('toolbar-expand', (_event, expanded) => {
   if (!toolbarWindow) return;
   toolbarExpanded = expanded;
   clearTimeout(dockHideTimer);
+  resetDockShape();
   if (dockSide && !isDockRevealed) revealDock();
   const bounds = toolbarWindow.getBounds();
   if (dockSide) {
@@ -939,5 +1020,8 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', (event) => event.preventDefault());
-app.on('before-quit', () => { isQuitting = true; });
+app.on('before-quit', () => {
+  isQuitting = true;
+  clearTimeout(dockShapeTimer);
+});
 app.on('activate', showToolbar);
