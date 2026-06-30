@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('penguin', {
   onDockState: (callback) => ipcRenderer.on('dock-state', (_event, value) => callback(value)),
   getDockState: () => ipcRenderer.invoke('get-dock-state'),
   dockHover: (hovering) => ipcRenderer.send('dock-hover', hovering),
+  peekReveal: () => ipcRenderer.send('peek-reveal'),
   getBackends: () => ipcRenderer.invoke('get-backends'),
   installBackends: () => ipcRenderer.invoke('install-backends'),
   previewCleanup: () => ipcRenderer.invoke('preview-cleanup'),

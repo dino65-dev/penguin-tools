@@ -20,15 +20,16 @@ const { execFile, spawn } = require('node:child_process');
 
 const TOOLBAR_SIZE = { width: 446, height: 84 };
 const DOCKED_SIZE = { width: 84, height: 446 };
+const PEEK_SIZE = { width: 32, height: 72 };
 const TOOLBAR_EXPANDED_HEIGHT = 310;
 const EDGE_THRESHOLD = 30;
-const EDGE_TAB_WIDTH = 14;
 const DOCK_TRANSITION_MS = 380;
 const CAPTURE_DIR = path.join(app.getPath('pictures'), 'Penguin Tools');
 const NOTES_FILE = path.join(app.getPath('userData'), 'notes.txt');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
 
 let toolbarWindow;
+let dockPeekWindow;
 let managerWindow;
 let captureWindow;
 let tray;
@@ -43,7 +44,8 @@ let cachedTempBytes = 0;
 let dockSide = null;
 let dockDisplayId = null;
 let dockHideTimer;
-let dockShapeTimer;
+let dockTransitionTimer;
+let dockPeekTimer;
 let isDockRevealed = true;
 let isProgrammaticMove = false;
 let toolbarExpanded = false;
@@ -107,6 +109,7 @@ function createToolbarWindow() {
   toolbarWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
   toolbarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   toolbarWindow.loadFile(path.join(__dirname, 'src', 'widget.html'));
+  createDockPeekWindow();
   toolbarWindow.once('ready-to-show', () => {
     toolbarWindow.showInactive();
     toolbarWindow.webContents.send('theme-update', { darkMode: settings.darkMode });
@@ -119,7 +122,8 @@ function createToolbarWindow() {
     else if (process.argv.includes('--qa-capture')) setTimeout(() => {
       toolbarWindow.webContents.executeJavaScript("document.getElementById('captureTile').click()", true);
     }, 700);
-    else if (process.argv.includes('--qa-edge')) runEdgeQa();
+    else if (process.argv.includes('--qa-edge-left')) runEdgeQa('left');
+    else if (process.argv.includes('--qa-edge')) runEdgeQa('right');
     else if (process.argv.includes('--qa-tools')) runToolsQa();
     else if (process.argv.includes('--qa-memory')) runMemoryQa();
   });
@@ -133,6 +137,34 @@ function createToolbarWindow() {
   toolbarWindow.on('moved', handleToolbarMoved);
 
   if (process.argv.includes('--hidden')) toolbarWindow.once('ready-to-show', () => toolbarWindow.hide());
+}
+
+function createDockPeekWindow() {
+  if (dockPeekWindow && !dockPeekWindow.isDestroyed()) return dockPeekWindow;
+  dockPeekWindow = new BrowserWindow({
+    ...PEEK_SIZE,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    focusable: false,
+    show: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  dockPeekWindow.setAlwaysOnTop(true, 'floating');
+  dockPeekWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  dockPeekWindow.loadFile(path.join(__dirname, 'src', 'peek.html'));
+  dockPeekWindow.on('closed', () => { dockPeekWindow = null; });
+  return dockPeekWindow;
 }
 
 function createManagerWindow(initialView = 'view-home') {
@@ -205,7 +237,7 @@ async function runVisualQa() {
   app.quit();
 }
 
-async function runEdgeQa() {
+async function runEdgeQa(side = 'right') {
   const original = readSettings();
   const display = screen.getPrimaryDisplay();
   const qaDir = path.join(__dirname, 'work');
@@ -215,7 +247,9 @@ async function runEdgeQa() {
   toolbarWindow.webContents.send('dock-state', { side: null, revealed: true });
   await new Promise((resolve) => setTimeout(resolve, 200));
   toolbarWindow.setBounds({
-    x: display.workArea.x + display.workArea.width - TOOLBAR_SIZE.width - 8,
+    x: side === 'left'
+      ? display.workArea.x + 8
+      : display.workArea.x + display.workArea.width - TOOLBAR_SIZE.width - 8,
     y: display.workArea.y + 100,
     ...TOOLBAR_SIZE,
   });
@@ -225,41 +259,57 @@ async function runEdgeQa() {
     return { classes: document.body.className, opacity: Number(style.opacity), transform: style.transform };
   })()`);
   const transitionImage = await toolbarWindow.webContents.capturePage();
-  await fs.promises.writeFile(path.join(qaDir, 'edge-dock-transition.png'), transitionImage.toPNG());
+  await fs.promises.writeFile(path.join(qaDir, `edge-dock-${side}-transition.png`), transitionImage.toPNG());
   await new Promise((resolve) => setTimeout(resolve, 350));
   const hidden = toolbarWindow.getBounds();
-  const hiddenUi = await toolbarWindow.webContents.executeJavaScript(`(() => {
-    const peek = document.getElementById('edgePeek').getBoundingClientRect();
-    return { classes: document.body.className, peek: { x: peek.x, y: peek.y, width: peek.width, height: peek.height } };
-  })()`);
-  const hiddenImage = await toolbarWindow.webContents.capturePage();
-  await fs.promises.writeFile(path.join(qaDir, 'edge-dock-hidden.png'), hiddenImage.toPNG());
-  revealDock();
+  const hiddenUi = await toolbarWindow.webContents.executeJavaScript('document.body.className');
+  const toolbarVisibleWhenHidden = toolbarWindow.isVisible();
+  const peekVisible = Boolean(dockPeekWindow && !dockPeekWindow.isDestroyed() && dockPeekWindow.isVisible());
+  const peekBounds = peekVisible ? dockPeekWindow.getBounds() : null;
+  if (peekVisible) {
+    const peekImage = await dockPeekWindow.webContents.capturePage();
+    await fs.promises.writeFile(path.join(qaDir, `edge-dock-${side}-hidden.png`), peekImage.toPNG());
+  }
+  await dockPeekWindow.webContents.executeJavaScript("document.getElementById('peek').click()", true);
   await new Promise((resolve) => setTimeout(resolve, 450));
   const revealed = toolbarWindow.getBounds();
   const revealedImage = await toolbarWindow.webContents.capturePage();
-  await fs.promises.writeFile(path.join(qaDir, 'edge-dock-revealed.png'), revealedImage.toPNG());
-  const expectedDockX = display.workArea.x + display.workArea.width - DOCKED_SIZE.width;
+  await fs.promises.writeFile(path.join(qaDir, `edge-dock-${side}-revealed.png`), revealedImage.toPNG());
+  const expectedDockX = side === 'left'
+    ? display.workArea.x
+    : display.workArea.x + display.workArea.width - DOCKED_SIZE.width;
+  const expectedPeekX = side === 'left'
+    ? display.workArea.x
+    : display.workArea.x + display.workArea.width - PEEK_SIZE.width;
   const dockClasses = await toolbarWindow.webContents.executeJavaScript('document.body.className');
-  await fs.promises.writeFile(path.join(qaDir, 'edge-dock-qa.json'), JSON.stringify({
+  await fs.promises.writeFile(path.join(qaDir, `edge-dock-${side}-qa.json`), JSON.stringify({
+    side,
     hidden,
     revealed,
     transitionUi,
     hiddenUi,
+    toolbarVisibleWhenHidden,
+    peekVisible,
+    peekBounds,
     dockClasses,
     expectedDockX,
+    expectedPeekX,
     passed: hidden.x === expectedDockX
       && hidden.width === DOCKED_SIZE.width
       && hidden.height === DOCKED_SIZE.height
       && transitionUi.classes.includes('dock-hidden')
       && transitionUi.opacity > 0
       && transitionUi.opacity < 1
-      && hiddenUi.classes.includes('dock-hidden')
-      && hiddenUi.peek.x + hiddenUi.peek.width === DOCKED_SIZE.width
+      && hiddenUi.includes('dock-hidden')
+      && !toolbarVisibleWhenHidden
+      && peekVisible
+      && peekBounds.x === expectedPeekX
+      && peekBounds.width === PEEK_SIZE.width
+      && peekBounds.height === PEEK_SIZE.height
       && revealed.x === expectedDockX
       && revealed.width === DOCKED_SIZE.width
       && revealed.height === DOCKED_SIZE.height
-      && dockClasses.includes('docked-right'),
+      && dockClasses.includes(`docked-${side}`),
   }, null, 2));
   writeSettings(original);
   isQuitting = true;
@@ -354,19 +404,26 @@ async function runMemoryQa() {
   app.quit();
 }
 
-function resetDockShape() {
-  clearTimeout(dockShapeTimer);
-  if (toolbarWindow && !toolbarWindow.isDestroyed() && typeof toolbarWindow.setShape === 'function') {
-    toolbarWindow.setShape([]);
-  }
+function hideDockPeek() {
+  clearTimeout(dockPeekTimer);
+  if (dockPeekWindow && !dockPeekWindow.isDestroyed()) dockPeekWindow.hide();
 }
 
-function applyHiddenDockShape() {
-  if (!dockSide || isDockRevealed || !toolbarWindow || toolbarWindow.isDestroyed()) return;
-  if (typeof toolbarWindow.setShape !== 'function') return;
-  const bounds = toolbarWindow.getBounds();
-  const x = dockSide === 'left' ? 0 : bounds.width - EDGE_TAB_WIDTH;
-  toolbarWindow.setShape([{ x, y: 12, width: EDGE_TAB_WIDTH, height: 64 }]);
+function showDockPeek() {
+  if (!dockSide || isDockRevealed) return;
+  const peek = createDockPeekWindow();
+  const area = getDockDisplay().workArea;
+  const toolbarBounds = toolbarWindow.getBounds();
+  const x = dockSide === 'left' ? area.x : area.x + area.width - PEEK_SIZE.width;
+  const y = Math.max(area.y, Math.min(toolbarBounds.y + 12, area.y + area.height - PEEK_SIZE.height));
+  peek.setBounds({ x, y, ...PEEK_SIZE });
+  const reveal = () => {
+    if (!dockSide || isDockRevealed || peek.isDestroyed()) return;
+    peek.webContents.send('dock-state', { side: dockSide, revealed: false });
+    peek.showInactive();
+  };
+  if (peek.webContents.isLoading()) peek.webContents.once('did-finish-load', reveal);
+  else reveal();
 }
 
 function getDockDisplay() {
@@ -379,7 +436,9 @@ function dockToolbar(side, display, preferredY, hideAfter = true) {
   dockSide = side;
   dockDisplayId = display.id;
   isDockRevealed = true;
-  resetDockShape();
+  clearTimeout(dockTransitionTimer);
+  hideDockPeek();
+  toolbarWindow.showInactive();
   const area = display.workArea;
   const y = Math.max(area.y, Math.min(Math.round(preferredY), area.y + area.height - DOCKED_SIZE.height));
   const x = side === 'left' ? area.x : area.x + area.width - DOCKED_SIZE.width;
@@ -403,7 +462,9 @@ function handleToolbarMoved() {
     dockDisplayId = null;
     isDockRevealed = true;
     clearTimeout(dockHideTimer);
-    resetDockShape();
+    clearTimeout(dockTransitionTimer);
+    hideDockPeek();
+    toolbarWindow.showInactive();
     toolbarWindow.webContents.send('dock-state', { side: null, revealed: true });
     const x = Math.max(area.x, Math.min(bounds.x, area.x + area.width - TOOLBAR_SIZE.width));
     const y = Math.max(area.y, Math.min(bounds.y, area.y + area.height - TOOLBAR_SIZE.height));
@@ -416,22 +477,29 @@ function handleToolbarMoved() {
 function revealDock() {
   if (!dockSide || !toolbarWindow) return;
   clearTimeout(dockHideTimer);
-  resetDockShape();
+  clearTimeout(dockTransitionTimer);
+  clearTimeout(dockPeekTimer);
   const area = getDockDisplay().workArea;
   const bounds = toolbarWindow.getBounds();
   const width = toolbarExpanded ? 310 : DOCKED_SIZE.width;
   const x = dockSide === 'left' ? area.x : area.x + area.width - width;
   isDockRevealed = true;
+  toolbarWindow.showInactive();
   setToolbarBounds({ x, y: bounds.y, width, height: DOCKED_SIZE.height }, true);
   toolbarWindow.webContents.send('dock-state', { side: dockSide, revealed: true });
+  dockPeekTimer = setTimeout(hideDockPeek, 140);
 }
 
 function hideDock() {
-  if (!dockSide || !toolbarWindow || toolbarExpanded) return;
+  if (!dockSide || !toolbarWindow || toolbarExpanded || !isDockRevealed) return;
   isDockRevealed = false;
   toolbarWindow.webContents.send('dock-state', { side: dockSide, revealed: false });
-  clearTimeout(dockShapeTimer);
-  dockShapeTimer = setTimeout(applyHiddenDockShape, DOCK_TRANSITION_MS);
+  clearTimeout(dockTransitionTimer);
+  clearTimeout(dockPeekTimer);
+  dockPeekTimer = setTimeout(showDockPeek, DOCK_TRANSITION_MS - 140);
+  dockTransitionTimer = setTimeout(() => {
+    if (!isDockRevealed && toolbarWindow && !toolbarWindow.isDestroyed()) toolbarWindow.hide();
+  }, DOCK_TRANSITION_MS);
 }
 
 function scheduleDockHide(delay = 650) {
@@ -561,6 +629,7 @@ async function beginCapture() {
   const bounds = toolbarWindow.getBounds();
   const display = screen.getDisplayNearestPoint({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 });
   toolbarWindow.hide();
+  hideDockPeek();
   managerWasVisibleForCapture = Boolean(managerWindow && !managerWindow.isDestroyed() && managerWindow.isVisible());
   if (managerWasVisibleForCapture) managerWindow.hide();
   await new Promise((resolve) => setTimeout(resolve, 180));
@@ -976,7 +1045,8 @@ ipcMain.on('toolbar-expand', (_event, expanded) => {
   if (!toolbarWindow) return;
   toolbarExpanded = expanded;
   clearTimeout(dockHideTimer);
-  resetDockShape();
+  clearTimeout(dockTransitionTimer);
+  hideDockPeek();
   if (dockSide && !isDockRevealed) revealDock();
   const bounds = toolbarWindow.getBounds();
   if (dockSide) {
@@ -998,13 +1068,17 @@ ipcMain.on('dock-hover', (_event, hovering) => {
   if (hovering) revealDock();
   else scheduleDockHide(520);
 });
+ipcMain.on('peek-reveal', revealDock);
 ipcMain.handle('get-dock-state', () => ({ side: dockSide, revealed: isDockRevealed }));
 ipcMain.handle('get-backends', getBackends);
 ipcMain.handle('install-backends', installPowerBackends);
 ipcMain.handle('preview-cleanup', () => runBleachBit('preview'));
 ipcMain.handle('run-cleanup', () => runBleachBit('clean'));
 ipcMain.handle('scan-folder', startClamScan);
-ipcMain.on('hide-toolbar', () => toolbarWindow?.hide());
+ipcMain.on('hide-toolbar', () => {
+  toolbarWindow?.hide();
+  hideDockPeek();
+});
 ipcMain.on('quit-app', () => { isQuitting = true; app.quit(); });
 
 app.whenReady().then(() => {
@@ -1022,6 +1096,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', (event) => event.preventDefault());
 app.on('before-quit', () => {
   isQuitting = true;
-  clearTimeout(dockShapeTimer);
+  clearTimeout(dockTransitionTimer);
+  clearTimeout(dockPeekTimer);
 });
 app.on('activate', showToolbar);
