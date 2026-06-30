@@ -80,7 +80,7 @@ If either engine is missing, the manager offers to install it. Penguin Tools det
 
 ## Releases
 
-Merging a new version into `main` automatically creates its `v*` tag, builds x86-64 and ARM64 AppImage and Debian packages, and publishes them to GitHub Releases. Existing version tags are detected and skipped.
+Every `v*` Git tag automatically builds x86-64 and ARM64 AppImage and Debian packages through GitHub Actions and publishes them to GitHub Releases.
 
 ## Build locally
 
