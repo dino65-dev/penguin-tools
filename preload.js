@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('penguin', {
   setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
   onTheme: (callback) => ipcRenderer.on('theme-update', (_event, value) => callback(value)),
   onDockState: (callback) => ipcRenderer.on('dock-state', (_event, value) => callback(value)),
+  getDockState: () => ipcRenderer.invoke('get-dock-state'),
   dockHover: (hovering) => ipcRenderer.send('dock-hover', hovering),
   getBackends: () => ipcRenderer.invoke('get-backends'),
   installBackends: () => ipcRenderer.invoke('install-backends'),

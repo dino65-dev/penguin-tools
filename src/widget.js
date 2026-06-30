@@ -8,6 +8,14 @@
   const menu = document.getElementById('menu');
   const search = document.getElementById('searchInput');
 
+  function applyDockState(state) {
+    const side = state?.side || null;
+    document.body.classList.toggle('docked', Boolean(side));
+    document.body.classList.toggle('docked-left', side === 'left');
+    document.body.classList.toggle('docked-right', side === 'right');
+    document.body.classList.toggle('dock-hidden', Boolean(side) && state.revealed === false);
+  }
+
   function rate(value) {
     if (!Number.isFinite(value) || value < 1) return '0B/s';
     const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
@@ -26,27 +34,32 @@
   async function searchWeb() {
     const query = search.value.trim();
     if (query) await window.penguin.webSearch(query);
+    else if (document.body.classList.contains('docked')) await window.penguin.openUrl('https://duckduckgo.com');
   }
 
   const tiles = Array.from(document.querySelectorAll('.tile'));
   if (tiles[0]) tiles[0].addEventListener('click', () => window.penguin.openManager('view-apps'));
   if (tiles[1]) tiles[1].addEventListener('click', () => window.penguin.openManager('view-clipboard'));
-  if (tiles[2]) tiles[2].addEventListener('click', () => window.penguin.openUrl('https://duckduckgo.com'));
+  if (tiles[2]) tiles[2].addEventListener('click', () => window.penguin.captureRegion());
 
   search.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') searchWeb();
   });
   document.querySelector('.search .mag')?.addEventListener('click', searchWeb);
 
-  const menuItems = Array.from(document.querySelectorAll('.menu-item'));
-  if (menuItems[1]) menuItems[1].addEventListener('click', () => window.penguin.openManager('view-ai'));
-  if (menuItems[2]) menuItems[2].addEventListener('click', () => window.penguin.hide());
+  document.getElementById('addTools')?.addEventListener('click', async () => {
+    menu.classList.remove('open');
+    await window.penguin.openManager('view-ai');
+  });
+  document.getElementById('hideToolbar')?.addEventListener('click', () => window.penguin.hide());
 
   new MutationObserver(() => window.penguin.expand(menu.classList.contains('open')))
     .observe(menu, { attributes: true, attributeFilter: ['class'] });
 
   document.body.addEventListener('mouseenter', () => window.penguin.dockHover(true));
   document.body.addEventListener('mouseleave', () => window.penguin.dockHover(false));
+  window.penguin.onDockState(applyDockState);
+  window.penguin.getDockState().then(applyDockState);
   window.penguin.onStats(updateStats);
   window.penguin.getStats().then(updateStats);
 })();

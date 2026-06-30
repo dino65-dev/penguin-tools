@@ -292,6 +292,7 @@
 
   renameLinuxLabels();
   bindActions();
+  if (location.hash.startsWith('#view-')) navigate(location.hash.slice(1));
   window.penguin.onManagerNavigate((view) => {
     navigate(view);
     if (view === 'view-clipboard') buildClipboardWorkspace();
