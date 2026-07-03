@@ -1,14 +1,14 @@
 # Penguin Tools [Still In Developement]
 
-A small, mouse-first Linux desktop toolbox inspired by Microsoft PC Manager's floating toolbar. It stays above other windows and gives you region screenshots, live system status, quick notes, a calculator shortcut, and a screenshot gallery without requiring keyboard shortcuts.
+A small, mouse-first Linux desktop maintenance toolbox. It stays above other windows and gives you region screenshots, live system status, quick notes, a calculator shortcut, and a screenshot gallery without requiring keyboard shortcuts.
 
 ![Penguin Tools floating toolbar](docs/toolbar.png)
 
-![Penguin PC Manager dashboard](docs/power-tools.png)
+![Penguin Tools dashboard](docs/power-tools.png)
 
 ## Features
 
-- Draggable, frameless floating widget and a separate full PC Manager dashboard
+- Draggable, frameless floating widget and a separate full Penguin Tools dashboard
 - Live memory, upload, download, search, area capture, quick tools, and menu controls in the widget
 - Stay horizontal while floating, then snap into a vertical left/right edge layout
 - Retract to a 14-pixel glowing edge tab and reveal the vertical widget on hover
@@ -95,7 +95,7 @@ The AppImage and Debian package are written to `dist/`.
 
 ## Mouse-only capture flow
 
-1. Open Penguin PC Manager from the widget menu.
+1. Open Penguin Tools from the widget menu.
 2. Click **Capture** on Home, or choose **Snipping tool** in AI Tools.
 3. Drag around the area you want.
 4. Click **Copy** in the selection controls.

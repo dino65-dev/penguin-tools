@@ -12,6 +12,18 @@
   const toolByLabel = (label) => Array.from(document.querySelectorAll('.tool-tile')).find((tool) => tool.querySelector('.label')?.textContent.trim() === label);
   const settingRowByTitle = (title) => Array.from(document.querySelectorAll('.settings-row')).find((row) => row.querySelector('.ttl')?.textContent.trim() === title);
   let toastTimer;
+  let customizingTools = false;
+  let selectedWidgetTools = new Set(['apps', 'notes', 'capture']);
+  const widgetToolIds = new Map([
+    ['Circle to Act', 'capture'],
+    ['Screenshot folder', 'screenshots'],
+    ['Notepad', 'notes'],
+    ['Calculator', 'calculator'],
+    ['Browser Quick Links', 'browser'],
+    ['Web translator', 'translate'],
+    ['Weather', 'weather'],
+    ['Image search', 'images'],
+  ]);
 
   function formatBytes(value, decimals = 1) {
     if (!Number.isFinite(value) || value <= 0) return '0 B';
@@ -50,8 +62,69 @@
   }
 
   function navigate(viewId) {
-    const nav = document.querySelector(`.nav-item[data-view="${viewId}"]`);
+    const customize = viewId === 'view-ai-customize';
+    const targetView = customize ? 'view-ai' : viewId;
+    if (!customize && targetView !== 'view-ai') exitToolCustomization();
+    if (!customize && targetView === 'view-ai') exitToolCustomization();
+    const nav = document.querySelector(`.nav-item[data-view="${targetView}"]`);
     if (nav) nav.click();
+    if (customize) enterToolCustomization();
+  }
+
+  function ensureCustomizationControls() {
+    const view = document.getElementById('view-ai');
+    const heading = view?.querySelector('.section-title');
+    if (!view || !heading) return;
+    let hint = view.querySelector('.customize-tools-hint');
+    if (!hint) {
+      hint = document.createElement('p');
+      hint.className = 'customize-tools-hint';
+      heading.insertAdjacentElement('afterend', hint);
+    }
+    let done = view.querySelector('.customize-tools-done');
+    if (!done) {
+      done = document.createElement('button');
+      done.className = 'customize-tools-done';
+      done.textContent = 'Done';
+      done.addEventListener('click', exitToolCustomization);
+      heading.insertAdjacentElement('afterend', done);
+    }
+  }
+
+  function renderToolCustomization() {
+    const view = document.getElementById('view-ai');
+    if (!view) return;
+    view.classList.toggle('customizing-tools', customizingTools);
+    text('#view-ai .section-title', customizingTools ? 'Add tools to toolbar' : 'AI Toolbox');
+    ensureCustomizationControls();
+    const hint = view.querySelector('.customize-tools-hint');
+    if (hint) hint.textContent = `${selectedWidgetTools.size}/4 selected. Apps is always available; click a supported tool to add or remove it.`;
+    for (const tile of view.querySelectorAll('.tool-tile')) {
+      const label = tile.querySelector('.label')?.textContent.trim();
+      const id = widgetToolIds.get(label);
+      tile.dataset.widgetToolId = id || '';
+      tile.classList.toggle('toolbar-supported', Boolean(id));
+      tile.classList.toggle('toolbar-selected', Boolean(id && selectedWidgetTools.has(id)));
+      let badge = tile.querySelector('.tool-selection-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'tool-selection-badge';
+        tile.appendChild(badge);
+      }
+      badge.textContent = !id ? 'Unavailable' : selectedWidgetTools.has(id) ? 'Added' : 'Add';
+    }
+  }
+
+  async function enterToolCustomization() {
+    selectedWidgetTools = new Set(await window.penguin.getWidgetTools());
+    customizingTools = true;
+    renderToolCustomization();
+  }
+
+  function exitToolCustomization() {
+    if (!customizingTools && !document.querySelector('#view-ai.customizing-tools')) return;
+    customizingTools = false;
+    renderToolCustomization();
   }
 
   function updateStats(stats) {
@@ -164,11 +237,9 @@
     text('.boost-head h3', 'Safe system boost');
     text('.boost-desc', 'Preview and remove temporary files using open-source Linux tools');
     const replacements = new Map([
-      ['Windows update', 'System updates'],
       ['Taskbar repair', 'Desktop diagnostics'],
       ['Restore default apps', 'Default applications'],
       ['Pop-up management', 'App permissions'],
-      ['Microsoft Store', 'Software Center'],
     ]);
     for (const heading of document.querySelectorAll('h4')) {
       const replacement = replacements.get(heading.textContent.trim());
@@ -189,8 +260,6 @@
     const largeScope = large?.querySelector('.dropdown span');
     if (largeScope) largeScope.textContent = '/home';
     document.querySelectorAll('.tool-tile .label').forEach((label) => {
-      if (label.textContent.trim() === 'Edge Quick Links') label.textContent = 'Browser Quick Links';
-      if (label.textContent.trim() === 'Bing translator') label.textContent = 'Web translator';
     });
     const restoreText = document.querySelector('#view-restore p');
     if (restoreText) restoreText.textContent = 'Your safety defaults and Penguin Tools settings are ready.';
@@ -203,11 +272,6 @@
       healthLines[0].textContent = 'Live monitoring';
       healthLines[1].innerHTML = '<strong>Active now</strong>';
     }
-    document.querySelectorAll('.ttl, .sub, p').forEach((element) => {
-      element.childNodes.forEach((node) => {
-        if (node.nodeType === Node.TEXT_NODE) node.textContent = node.textContent.replaceAll('Microsoft PC Manager', 'Penguin PC Manager').replaceAll('Windows', 'Linux');
-      });
-    });
   }
 
   function bindActions() {
@@ -271,11 +335,28 @@
       ['Weather', () => window.penguin.openUrl('https://wttr.in/')],
       ['Image search', () => window.penguin.openUrl('https://images.google.com')],
     ]);
-    for (const [label, action] of toolActions) toolByLabel(label)?.addEventListener('click', action);
     document.querySelectorAll('.tool-tile').forEach((tool) => {
-      if (!toolActions.has(tool.querySelector('.label')?.textContent.trim())) {
-        tool.addEventListener('click', () => showToast('This tool needs an additional Linux backend and is not enabled yet.'));
-      }
+      tool.addEventListener('click', async () => {
+        const label = tool.querySelector('.label')?.textContent.trim();
+        const id = widgetToolIds.get(label);
+        if (customizingTools) {
+          if (!id) {
+            showToast('This tool cannot be added until its Linux backend is available.');
+            return;
+          }
+          if (selectedWidgetTools.has(id)) selectedWidgetTools.delete(id);
+          else if (selectedWidgetTools.size >= 4) {
+            showToast('The compact toolbar supports up to four tools. Remove one first.');
+            return;
+          } else selectedWidgetTools.add(id);
+          selectedWidgetTools = new Set(await window.penguin.setWidgetTools([...selectedWidgetTools]));
+          renderToolCustomization();
+          return;
+        }
+        const action = toolActions.get(label);
+        if (action) action();
+        else showToast('This tool needs an additional Linux backend and is not enabled yet.');
+      });
     });
 
     document.querySelector('.nav-item[data-view="view-clipboard"]')?.addEventListener('click', buildClipboardWorkspace);
@@ -285,7 +366,7 @@
       if (!toolbarSetting.classList.contains('on')) setTimeout(() => window.penguin.hide(), 180);
     });
 
-    const launchSetting = Array.from(document.querySelectorAll('.settings-row')).find((row) => row.querySelector('.ttl')?.textContent.includes('Start Penguin PC Manager automatically'));
+    const launchSetting = Array.from(document.querySelectorAll('.settings-row')).find((row) => row.querySelector('.ttl')?.textContent.includes('Start Penguin Tools automatically'));
     const launchToggle = launchSetting?.querySelector('.toggle');
     launchToggle?.addEventListener('click', () => window.penguin.setSetting('launchAtLogin', launchToggle.classList.contains('on')));
   }
@@ -297,6 +378,10 @@
     navigate(view);
     if (view === 'view-clipboard') buildClipboardWorkspace();
   });
+  window.penguin.onWidgetToolsChanged((tools) => {
+    selectedWidgetTools = new Set(tools);
+    if (customizingTools) renderToolCustomization();
+  });
   window.penguin.onStats(updateStats);
   window.penguin.onSecurityProgress(({ status, target, message }) => {
     if (status === 'running') showToast(`Scanning ${target}…`, 2500);
@@ -304,7 +389,7 @@
   });
   window.penguin.getStats().then(updateStats);
   window.penguin.getSettings().then((settings) => {
-    const launchSetting = Array.from(document.querySelectorAll('.settings-row')).find((row) => row.querySelector('.ttl')?.textContent.includes('Start Penguin PC Manager automatically'));
+    const launchSetting = Array.from(document.querySelectorAll('.settings-row')).find((row) => row.querySelector('.ttl')?.textContent.includes('Start Penguin Tools automatically'));
     launchSetting?.querySelector('.toggle')?.classList.toggle('on', settings.launchAtLogin);
   });
   window.penguin.getDefaultBrowser().then((browser) => {

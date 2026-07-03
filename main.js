@@ -19,10 +19,10 @@ const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
 
 const TOOLBAR_SIZE = { width: 446, height: 84 };
-const DOCKED_SIZE = { width: 84, height: 446 };
+const DOCKED_SIZE = { width: 72, height: 292 };
 const PEEK_SIZE = { width: 32, height: 72 };
 const TOOLBAR_EXPANDED_HEIGHT = 310;
-const EDGE_THRESHOLD = 30;
+const EDGE_THRESHOLD = 4;
 const DOCK_TRANSITION_MS = 380;
 const CAPTURE_DIR = path.join(app.getPath('pictures'), 'Penguin Tools');
 const NOTES_FILE = path.join(app.getPath('userData'), 'notes.txt');
@@ -46,6 +46,7 @@ let dockDisplayId = null;
 let dockHideTimer;
 let dockTransitionTimer;
 let dockPeekTimer;
+let toolbarMoveTimer;
 let isDockRevealed = true;
 let isProgrammaticMove = false;
 let toolbarExpanded = false;
@@ -58,6 +59,7 @@ function readSettings() {
     dockSide: null,
     dockDisplayId: null,
     dockY: null,
+    widgetTools: ['apps', 'notes', 'capture'],
   };
   try {
     return { ...defaults, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
@@ -120,7 +122,7 @@ function createToolbarWindow() {
     }
     if (process.argv.includes('--qa-screenshots')) runVisualQa();
     else if (process.argv.includes('--qa-capture')) setTimeout(() => {
-      toolbarWindow.webContents.executeJavaScript("document.getElementById('captureTile').click()", true);
+      toolbarWindow.webContents.executeJavaScript("document.querySelector('[data-tool-id=\"capture\"]')?.click()", true);
     }, 700);
     else if (process.argv.includes('--qa-edge-left')) runEdgeQa('left');
     else if (process.argv.includes('--qa-edge')) runEdgeQa('right');
@@ -133,8 +135,8 @@ function createToolbarWindow() {
       toolbarWindow.hide();
     }
   });
-  toolbarWindow.on('move', handleToolbarMoved);
-  toolbarWindow.on('moved', handleToolbarMoved);
+  toolbarWindow.on('move', () => scheduleToolbarMoveEvaluation(180));
+  toolbarWindow.on('moved', () => scheduleToolbarMoveEvaluation(80));
 
   if (process.argv.includes('--hidden')) toolbarWindow.once('ready-to-show', () => toolbarWindow.hide());
 }
@@ -185,7 +187,7 @@ function createManagerWindow(initialView = 'view-home') {
     transparent: false,
     show: false,
     backgroundColor: '#0c1118',
-    title: 'Penguin PC Manager',
+    title: 'Penguin Tools',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -246,21 +248,35 @@ async function runEdgeQa(side = 'right') {
   dockDisplayId = null;
   toolbarWindow.webContents.send('dock-state', { side: null, revealed: true });
   await new Promise((resolve) => setTimeout(resolve, 200));
+  const nearButNotDockedX = side === 'left'
+    ? display.workArea.x + 20
+    : display.workArea.x + display.workArea.width - TOOLBAR_SIZE.width - 20;
   toolbarWindow.setBounds({
-    x: side === 'left'
-      ? display.workArea.x + 8
-      : display.workArea.x + display.workArea.width - TOOLBAR_SIZE.width - 8,
+    x: nearButNotDockedX,
     y: display.workArea.y + 100,
     ...TOOLBAR_SIZE,
   });
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await new Promise((resolve) => setTimeout(resolve, 320));
+  const remainedFloatingNearEdge = dockSide === null && toolbarWindow.getBounds().width === TOOLBAR_SIZE.width;
+  toolbarWindow.setBounds({
+    x: side === 'left'
+      ? display.workArea.x + 2
+      : display.workArea.x + display.workArea.width - TOOLBAR_SIZE.width - 2,
+    y: display.workArea.y + 100,
+    ...TOOLBAR_SIZE,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 320));
+  const snappedAtContact = dockSide === side && toolbarWindow.getBounds().width === DOCKED_SIZE.width;
+  clearTimeout(dockHideTimer);
+  hideDock();
+  await new Promise((resolve) => setTimeout(resolve, 180));
   const transitionUi = await toolbarWindow.webContents.executeJavaScript(`(() => {
     const style = getComputedStyle(document.getElementById('widget'));
     return { classes: document.body.className, opacity: Number(style.opacity), transform: style.transform };
   })()`);
   const transitionImage = await toolbarWindow.webContents.capturePage();
   await fs.promises.writeFile(path.join(qaDir, `edge-dock-${side}-transition.png`), transitionImage.toPNG());
-  await new Promise((resolve) => setTimeout(resolve, 350));
+  await new Promise((resolve) => setTimeout(resolve, 260));
   const hidden = toolbarWindow.getBounds();
   const hiddenUi = await toolbarWindow.webContents.executeJavaScript('document.body.className');
   const toolbarVisibleWhenHidden = toolbarWindow.isVisible();
@@ -294,7 +310,10 @@ async function runEdgeQa(side = 'right') {
     dockClasses,
     expectedDockX,
     expectedPeekX,
-    passed: hidden.x === expectedDockX
+    remainedFloatingNearEdge,
+    snappedAtContact,
+    passed: remainedFloatingNearEdge && snappedAtContact
+      && hidden.x === expectedDockX
       && hidden.width === DOCKED_SIZE.width
       && hidden.height === DOCKED_SIZE.height
       && transitionUi.classes.includes('dock-hidden')
@@ -317,6 +336,8 @@ async function runEdgeQa(side = 'right') {
 }
 
 async function runToolsQa() {
+  const original = readSettings();
+  writeSettings({ ...original, widgetTools: ['apps', 'notes', 'capture'] });
   const qaDir = path.join(__dirname, 'work');
   await fs.promises.mkdir(qaDir, { recursive: true });
   await toolbarWindow.webContents.executeJavaScript(`
@@ -328,15 +349,39 @@ async function runToolsQa() {
     ? await managerWindow.webContents.executeJavaScript("document.querySelector('.view.active')?.id || ''")
     : '';
   const managerVisible = Boolean(managerWindow && !managerWindow.isDestroyed() && managerWindow.isVisible());
+  const customizing = managerVisible
+    ? await managerWindow.webContents.executeJavaScript("document.getElementById('view-ai').classList.contains('customizing-tools')")
+    : false;
+  if (customizing) {
+    await managerWindow.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.tool-tile')).find((tile) => tile.querySelector('.label')?.textContent.trim() === 'Calculator')?.click()`, true);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  const toolsAfterClick = readSettings().widgetTools;
+  const activeAfterClick = managerVisible
+    ? await managerWindow.webContents.executeJavaScript("document.querySelector('.view.active')?.id || ''")
+    : '';
   if (managerVisible) {
     const image = await managerWindow.webContents.capturePage();
     await fs.promises.writeFile(path.join(qaDir, 'add-tools.png'), image.toPNG());
   }
+  if (dockSide) revealDock();
+  else toolbarWindow.showInactive();
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  const renderedToolIds = await toolbarWindow.webContents.executeJavaScript("Array.from(document.querySelectorAll('#widgetTools .tile')).map((tile) => tile.dataset.toolId)");
+  const widgetImage = await toolbarWindow.webContents.capturePage();
+  await fs.promises.writeFile(path.join(qaDir, 'customized-widget.png'), widgetImage.toPNG());
   await fs.promises.writeFile(path.join(qaDir, 'add-tools-qa.json'), JSON.stringify({
     managerVisible,
     activeView,
-    passed: managerVisible && activeView === 'view-ai',
+    customizing,
+    toolsAfterClick,
+    renderedToolIds,
+    activeAfterClick,
+    passed: managerVisible && activeView === 'view-ai' && customizing
+      && toolsAfterClick.includes('calculator') && renderedToolIds.includes('calculator')
+      && activeAfterClick === 'view-ai',
   }, null, 2));
+  writeSettings(original);
   isQuitting = true;
   app.quit();
 }
@@ -353,7 +398,7 @@ function createTray() {
   tray.setToolTip('Penguin Tools');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show toolbar', click: showToolbar },
-    { label: 'Open PC Manager', click: () => createManagerWindow() },
+    { label: 'Open Penguin Tools', click: () => createManagerWindow() },
     { label: 'Capture region', click: beginCapture },
     { label: 'Open screenshots', click: () => openCaptureFolder() },
     { type: 'separator' },
@@ -376,6 +421,12 @@ function setToolbarBounds(bounds, animate = false) {
   isProgrammaticMove = true;
   toolbarWindow.setBounds(bounds, animate);
   setTimeout(() => { isProgrammaticMove = false; }, animate ? 320 : 80);
+}
+
+function scheduleToolbarMoveEvaluation(delay = 160) {
+  if (isProgrammaticMove || !toolbarWindow || toolbarExpanded) return;
+  clearTimeout(toolbarMoveTimer);
+  toolbarMoveTimer = setTimeout(handleToolbarMoved, delay);
 }
 
 async function runMemoryQa() {
@@ -648,7 +699,9 @@ async function beginCapture() {
       transparent: false,
       resizable: false,
       movable: false,
-      fullscreenable: false,
+      fullscreenable: true,
+      fullscreen: true,
+      kiosk: true,
       alwaysOnTop: true,
       skipTaskbar: true,
       backgroundColor: '#111318',
@@ -667,6 +720,7 @@ async function beginCapture() {
         display: { width: display.bounds.width, height: display.bounds.height },
       });
       captureWindow.show();
+      if (!captureWindow.isKiosk()) captureWindow.setKiosk(true);
       if (process.argv.includes('--qa-capture')) runCaptureQa();
     });
     captureWindow.on('closed', () => {
@@ -698,6 +752,14 @@ async function runCaptureQa() {
   await new Promise((resolve) => setTimeout(resolve, 250));
   const overlay = await captureWindow.webContents.capturePage();
   await fs.promises.writeFile(path.join(qaDir, 'capture-selection.png'), overlay.toPNG());
+  const captureBounds = captureWindow.getBounds();
+  await fs.promises.writeFile(path.join(qaDir, 'capture-window-qa.json'), JSON.stringify({
+    fullscreen: captureWindow.isFullScreen(),
+    kiosk: captureWindow.isKiosk(),
+    captureBounds,
+    displayBounds: captureDisplay.bounds,
+    passed: captureWindow.isFullScreen() && captureWindow.isKiosk(),
+  }, null, 2));
   isQuitting = true;
   app.quit();
 }
@@ -1028,6 +1090,17 @@ ipcMain.handle('save-notes', async (_event, text) => {
   await fs.promises.writeFile(NOTES_FILE, String(text).slice(0, 20000), 'utf8');
 });
 ipcMain.handle('get-settings', () => readSettings());
+ipcMain.handle('get-widget-tools', () => readSettings().widgetTools);
+ipcMain.handle('set-widget-tools', (_event, requested) => {
+  const allowed = new Set(['apps', 'notes', 'capture', 'screenshots', 'calculator', 'browser', 'translate', 'weather', 'images']);
+  const values = Array.isArray(requested) ? requested.filter((id) => allowed.has(id)) : [];
+  const unique = ['apps', ...values.filter((id) => id !== 'apps')].filter((id, index, list) => list.indexOf(id) === index).slice(0, 4);
+  const settings = readSettings();
+  settings.widgetTools = unique.length ? unique : ['apps', 'notes', 'capture'];
+  writeSettings(settings);
+  broadcast('widget-tools-changed', settings.widgetTools);
+  return settings.widgetTools;
+});
 ipcMain.handle('set-setting', (_event, key, value) => {
   const settings = readSettings();
   if (!['alwaysOnTop', 'launchAtLogin', 'darkMode'].includes(key)) return settings;
@@ -1098,5 +1171,6 @@ app.on('before-quit', () => {
   isQuitting = true;
   clearTimeout(dockTransitionTimer);
   clearTimeout(dockPeekTimer);
+  clearTimeout(toolbarMoveTimer);
 });
 app.on('activate', showToolbar);
