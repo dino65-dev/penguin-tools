@@ -34,6 +34,7 @@ body::after { display: none; }
 .search,
 .more,
 .menu-item { -webkit-app-region: no-drag; }
+.tile { padding: 0; }
 
 .widget,
 .handle,
@@ -42,6 +43,8 @@ body::after { display: none; }
 .ring {
   cursor: pointer;
   -webkit-app-region: no-drag;
+  animation: none;
+  filter: drop-shadow(0 0 3px rgba(91,155,255,.42));
 }
 
 .ring:focus-visible {
@@ -77,9 +80,9 @@ body.docked-left .wrap { align-items: flex-start; }
 body.docked-right .wrap { align-items: flex-end; }
 
 body.docked .widget {
-  width: 68px;
-  height: 430px;
-  padding: 10px 8px;
+  width: 56px;
+  height: 276px;
+  padding: 8px 6px;
 }
 
 body.docked .row {
@@ -96,7 +99,7 @@ body.docked .icons {
 
 body.docked .speeds { display: none; }
 
-body.docked .icons { gap: 7px; }
+body.docked .icons { gap: 5px; }
 
 body.docked .search {
   flex: 0 0 34px;
@@ -107,7 +110,7 @@ body.docked .search {
 
 body.docked .search input { display: none; }
 body.docked .search svg.mag { width: 15px; height: 15px; }
-body.docked .more-wrap { margin-top: auto; }
+body.docked .more-wrap { margin-top: 0; }
 
 body.docked-left .menu {
   left: calc(100% + 10px);
