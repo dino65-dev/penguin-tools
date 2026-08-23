@@ -33,11 +33,12 @@ function configureLinuxDisplayBackend(electronApp, options = {}) {
   const env = options.env || process.env;
   const argv = options.argv || process.argv;
   const wayland = platform === 'linux' && isWaylandSession(env);
+  const xwaylandAvailable = Boolean(normalized(env.DISPLAY));
   const ozonePlatform = getSwitchValue(argv, 'ozone-platform').toLowerCase();
   const nativeWaylandRequested = env.PENGUIN_TOOLS_NATIVE_WAYLAND === '1'
     || ozonePlatform === 'wayland';
 
-  const forcedXwayland = wayland && !nativeWaylandRequested && !ozonePlatform;
+  const forcedXwayland = wayland && xwaylandAvailable && !nativeWaylandRequested && !ozonePlatform;
   if (forcedXwayland) {
     electronApp.commandLine.appendSwitch('ozone-platform', 'x11');
   }
