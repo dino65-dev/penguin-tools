@@ -36,7 +36,7 @@ test('forces XWayland and keeps PipeWire capture in a Wayland session', () => {
   const app = appSpy();
   const result = configureLinuxDisplayBackend(app, {
     platform: 'linux',
-    env: { XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'wayland-0' },
+    env: { XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'wayland-0', DISPLAY: ':0' },
     argv: ['electron', '.'],
   });
 
@@ -56,7 +56,7 @@ test('preserves existing Chromium features when enabling PipeWire', () => {
   const app = appSpy();
   configureLinuxDisplayBackend(app, {
     platform: 'linux',
-    env: { XDG_SESSION_TYPE: 'wayland' },
+    env: { XDG_SESSION_TYPE: 'wayland', DISPLAY: ':0' },
     argv: ['app', '--enable-features=ExistingFeature'],
   });
 
@@ -64,6 +64,19 @@ test('preserves existing Chromium features when enabling PipeWire', () => {
     ['ozone-platform', 'x11'],
     ['enable-features', `ExistingFeature,${PIPEWIRE_FEATURE}`],
   ]);
+});
+
+test('keeps native Wayland as a safe fallback when XWayland is unavailable', () => {
+  const app = appSpy();
+  const result = configureLinuxDisplayBackend(app, {
+    platform: 'linux',
+    env: { XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'wayland-0' },
+    argv: ['app'],
+  });
+
+  assert.equal(result.forcedXwayland, false);
+  assert.equal(result.backend, 'wayland');
+  assert.deepEqual(app.switches, [['enable-features', PIPEWIRE_FEATURE]]);
 });
 
 test('respects an explicit native Wayland opt-in', () => {
