@@ -24,7 +24,7 @@ A small, mouse-first Linux desktop maintenance toolbox. It stays above other win
 - Current text clipboard reader/writer
 - Opens your installed Linux calculator
 - System tray controls, always-on-top toggle, and launch-at-login option
-- X11 sessions run natively; Wayland sessions automatically use XWayland for reliable dragging, edge docking, and always-on-top behavior while capture stays on PipeWire/portal
+- X11 sessions run natively; Wayland sessions automatically use XWayland when available for reliable dragging, edge docking, and always-on-top behavior while capture stays on PipeWire/portal
 - Optional BleachBit cleanup and ClamAV folder scanning from the manager
 
 ## Install
@@ -62,7 +62,7 @@ npm install
 npm start
 ```
 
-On Wayland, Penguin Tools automatically launches its windows through XWayland because the native Wayland protocol does not permit applications to read or set global top-level window positions. Screen capture still uses PipeWire and the desktop portal. Install the portal implementation for your desktop if capture is unavailable:
+On Wayland, Penguin Tools automatically launches its windows through XWayland when the session exposes it because the native Wayland protocol does not permit applications to read or set global top-level window positions. Screen capture still uses PipeWire and the desktop portal. Install the portal implementation for your desktop if capture is unavailable:
 
 - GNOME: `xdg-desktop-portal-gnome`
 - KDE Plasma: `xdg-desktop-portal-kde`
@@ -112,7 +112,7 @@ All screenshots and notes stay on the local computer. Penguin Tools has no analy
 
 ## Known platform behavior
 
-- Wayland widget geometry is provided through XWayland; PipeWire/portal remains responsible for screen capture.
+- Wayland widget geometry is provided through XWayland when available; PipeWire/portal remains responsible for screen capture.
 
 - Multi-monitor capture targets the monitor containing the toolbar.
 - Network speed comes from `/proc/net/dev` on Linux. On other platforms it displays zero.
