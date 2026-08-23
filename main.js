@@ -17,7 +17,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
-const { configureLinuxDisplayBackend } = require('./src/platform');
+const { configureLinuxDisplayBackend, isWaylandSession } = require('./src/platform');
+const { captureWaylandDisplay } = require('./src/linux-capture');
 
 const linuxDisplayBackend = configureLinuxDisplayBackend(app);
 if (linuxDisplayBackend.forcedXwayland) {
@@ -671,6 +672,27 @@ function systemStats() {
 }
 
 async function findCaptureSource(display) {
+  if (process.platform === 'linux' && isWaylandSession(process.env)) {
+    const nativeCapture = await captureWaylandDisplay({
+      display,
+      displays: screen.getAllDisplays(),
+      nativeImage,
+    });
+    if (nativeCapture) {
+      console.info(`[Penguin Tools] Captured Wayland desktop with ${nativeCapture.backend}.`);
+      return {
+        display_id: String(display.id),
+        thumbnail: nativeCapture.image,
+        nativeBackend: nativeCapture.backend,
+      };
+    }
+    if (process.env.PENGUIN_TOOLS_ALLOW_PORTAL_CAPTURE !== '1') {
+      throw new Error(
+        'No prompt-free Wayland screenshot backend was found. Re-run the Penguin Tools installer to add the native backend for your desktop.',
+      );
+    }
+  }
+
   const width = Math.max(1, Math.round(display.size.width * display.scaleFactor));
   const height = Math.max(1, Math.round(display.size.height * display.scaleFactor));
   const sources = await desktopCapturer.getSources({
