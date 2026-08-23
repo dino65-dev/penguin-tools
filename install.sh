@@ -51,6 +51,33 @@ install_wayland_portal() {
   fi
 }
 
+install_xwayland() {
+  [[ "${XDG_SESSION_TYPE:-}" == "wayland" || -n "${WAYLAND_DISPLAY:-}" ]] || return 0
+  [[ "${PENGUIN_TOOLS_SKIP_XWAYLAND:-0}" != "1" ]] || return 0
+
+  if command -v Xwayland >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo "Install XWayland to enable reliable widget dragging and edge docking (sudo was not found)."
+    return 0
+  fi
+
+  echo "Installing XWayland for reliable widget dragging and edge docking..."
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get update && sudo apt-get install -y xwayland || true
+  elif command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y xorg-x11-server-Xwayland || true
+  elif command -v pacman >/dev/null 2>&1; then
+    sudo pacman -S --needed --noconfirm xorg-xwayland || true
+  elif command -v zypper >/dev/null 2>&1; then
+    sudo zypper --non-interactive install xwayland || true
+  else
+    echo "Package manager not recognized. Install XWayland to enable widget docking."
+  fi
+}
+
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "Penguin Tools currently supports Linux only." >&2
   exit 1
@@ -71,6 +98,7 @@ done
 
 mkdir -p "$INSTALL_ROOT" "$BIN_DIR" "$DESKTOP_DIR"
 install_wayland_portal
+install_xwayland
 
 echo "Downloading Penguin Tools for $RELEASE_ARCH..."
 curl --fail --location --show-error --progress-bar \
@@ -84,10 +112,22 @@ chmod +x "$APPIMAGE"
 cat > "$WRAPPER" <<EOF
 #!/usr/bin/env bash
 APPIMAGE="$APPIMAGE"
-if "\$APPIMAGE" --appimage-version >/dev/null 2>&1; then
-  exec "\$APPIMAGE" "\$@"
+PENGUIN_ARGS=()
+HAS_OZONE_OVERRIDE=0
+for argument in "\$@"; do
+  case "\$argument" in
+    --ozone-platform|--ozone-platform=*) HAS_OZONE_OVERRIDE=1 ;;
+  esac
+done
+if [[ "\${XDG_SESSION_TYPE:-}" == "wayland" || -n "\${WAYLAND_DISPLAY:-}" ]] \\
+  && [[ "\${PENGUIN_TOOLS_NATIVE_WAYLAND:-0}" != "1" ]] \\
+  && [[ "\$HAS_OZONE_OVERRIDE" != "1" ]]; then
+  PENGUIN_ARGS+=(--ozone-platform=x11)
 fi
-APPIMAGE_EXTRACT_AND_RUN=1 exec "\$APPIMAGE" "\$@"
+if "\$APPIMAGE" --appimage-version >/dev/null 2>&1; then
+  exec "\$APPIMAGE" "\${PENGUIN_ARGS[@]}" "\$@"
+fi
+APPIMAGE_EXTRACT_AND_RUN=1 exec "\$APPIMAGE" "\${PENGUIN_ARGS[@]}" "\$@"
 EOF
 chmod +x "$WRAPPER"
 
