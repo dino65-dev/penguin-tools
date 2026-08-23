@@ -12,10 +12,11 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "check": "node --check main.js && node --check preload.js && node --check src/platform.js && node --check src/widget.js && node --check src/peek.js && node --check src/manager.js && node --check src/capture.js && npm test",
+    "check": "node --check main.js && node --check preload.js && node --check src/platform.js && node --check src/widget.js && node --check src/peek.js && node --check src/manager.js && node --check src/capture.js && npm test && npm run check:shell",
     "dist:linux": "electron-builder --linux AppImage deb",
     "dist:appimage": "electron-builder --linux AppImage",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "check:shell": "bash -n install.sh uninstall.sh"
   },
   "devDependencies": {
     "electron": "^42.5.0",
