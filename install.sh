@@ -10,8 +10,72 @@ DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 DESKTOP_FILE="$DESKTOP_DIR/penguin-tools.desktop"
 ICON="$INSTALL_ROOT/icon.svg"
 
+install_wayland_capture_backend() {
+  [[ "${XDG_SESSION_TYPE:-}" == "wayland" || -n "${WAYLAND_DISPLAY:-}" ]] || return 0
+  [[ "${PENGUIN_TOOLS_SKIP_CAPTURE_BACKEND:-0}" != "1" ]] || return 0
+
+  local desktop="${XDG_CURRENT_DESKTOP:-${XDG_SESSION_DESKTOP:-}}"
+  local command_name
+  local apt_package
+  local dnf_package
+  local pacman_package
+  local zypper_package
+
+  case "${desktop,,}" in
+    *gnome*|*unity*|*cinnamon*)
+      command_name="gdbus"
+      apt_package="libglib2.0-bin"
+      dnf_package="glib2"
+      pacman_package="glib2"
+      zypper_package="glib2-tools"
+      ;;
+    *kde*|*plasma*)
+      command_name="spectacle"
+      apt_package="spectacle"
+      dnf_package="spectacle"
+      pacman_package="spectacle"
+      zypper_package="spectacle"
+      ;;
+    *hyprland*|*sway*|*wlroots*|*river*|*wayfire*)
+      command_name="grim"
+      apt_package="grim"
+      dnf_package="grim"
+      pacman_package="grim"
+      zypper_package="grim"
+      ;;
+    *)
+      for command_name in gdbus spectacle grim gnome-screenshot; do
+        command -v "$command_name" >/dev/null 2>&1 && return 0
+      done
+      echo "Desktop-native Wayland capture backend was not detected for: ${desktop:-unknown}."
+      echo "Install gdbus, Spectacle, or grim for prompt-free capture on your compositor."
+      return 0
+      ;;
+  esac
+
+  command -v "$command_name" >/dev/null 2>&1 && return 0
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo "Install $command_name to enable prompt-free Wayland capture (sudo was not found)."
+    return 0
+  fi
+
+  echo "Installing $command_name for prompt-free Wayland screen capture..."
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get update && sudo apt-get install -y "$apt_package" || true
+  elif command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y "$dnf_package" || true
+  elif command -v pacman >/dev/null 2>&1; then
+    sudo pacman -S --needed --noconfirm "$pacman_package" || true
+  elif command -v zypper >/dev/null 2>&1; then
+    sudo zypper --non-interactive install "$zypper_package" || true
+  else
+    echo "Package manager not recognized. Install $command_name for prompt-free capture."
+  fi
+}
+
 install_wayland_portal() {
   [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]] || return 0
+  [[ "${PENGUIN_TOOLS_INSTALL_PORTAL:-0}" == "1" ]] || return 0
   [[ "${PENGUIN_TOOLS_SKIP_PORTAL:-0}" != "1" ]] || return 0
 
   if compgen -G '/usr/share/xdg-desktop-portal/portals/*.portal' >/dev/null; then
@@ -97,8 +161,9 @@ for command in curl chmod mkdir; do
 done
 
 mkdir -p "$INSTALL_ROOT" "$BIN_DIR" "$DESKTOP_DIR"
-install_wayland_portal
+install_wayland_capture_backend
 install_xwayland
+install_wayland_portal
 
 echo "Downloading Penguin Tools for $RELEASE_ARCH..."
 curl --fail --location --show-error --progress-bar \

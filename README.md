@@ -24,7 +24,7 @@ A small, mouse-first Linux desktop maintenance toolbox. It stays above other win
 - Current text clipboard reader/writer
 - Opens your installed Linux calculator
 - System tray controls, always-on-top toggle, and launch-at-login option
-- X11 sessions run natively; Wayland sessions automatically use XWayland when available for reliable dragging, edge docking, and always-on-top behavior while capture stays on PipeWire/portal
+- X11 sessions run natively; Wayland sessions use XWayland for reliable widget geometry and a compositor-native screenshot backend, avoiding the screen-sharing prompt on supported desktops
 - Optional BleachBit cleanup and ClamAV folder scanning from the manager
 
 ## Install
@@ -42,10 +42,10 @@ Then open **Penguin Tools** from your application menu. The installer:
 - works without root access;
 - adds the `penguin-tools` command and application-menu entry;
 - falls back to AppImage extract-and-run mode when FUSE is unavailable.
-- detects missing Wayland capture portals and installs the appropriate GNOME, KDE, Hyprland, or wlroots backend using your distro's package manager;
+- detects Cinnamon/GNOME, KDE Plasma, Hyprland, Sway, and other wlroots desktops and installs the appropriate prompt-free capture command when it is missing;
 - installs XWayland when needed so the floating widget can be positioned and docked reliably.
 
-Portal installation requests `sudo` only when the dependency is missing. Set `PENGUIN_TOOLS_SKIP_PORTAL=1` before the install command if you want to manage portal packages yourself.
+Capture-backend installation requests `sudo` only when the desktop-native command is missing. Set `PENGUIN_TOOLS_SKIP_CAPTURE_BACKEND=1` before the install command if you want to manage it yourself.
 
 To uninstall the application while keeping your screenshots and notes:
 
@@ -62,13 +62,14 @@ npm install
 npm start
 ```
 
-On Wayland, Penguin Tools automatically launches its windows through XWayland when the session exposes it because the native Wayland protocol does not permit applications to read or set global top-level window positions. Screen capture still uses PipeWire and the desktop portal. Install the portal implementation for your desktop if capture is unavailable:
+On Wayland, Penguin Tools automatically launches its windows through XWayland when the session exposes it because native Wayland does not permit applications to position global floating windows. Area capture does not use Electron's ScreenCast portal by default. It first obtains a clean desktop image from the desktop's native screenshot interface, then opens Penguin Tools' own mouse-only rectangle selector:
 
-- GNOME: `xdg-desktop-portal-gnome`
-- KDE Plasma: `xdg-desktop-portal-kde`
-- wlroots compositors: `xdg-desktop-portal-wlr`
+- Cinnamon: `org.cinnamon.Screenshot`, with the older Cinnamon-compatible `org.gnome.Shell.Screenshot` service as fallback
+- GNOME: `org.gnome.Shell.Screenshot` or GNOME Screenshot
+- KDE Plasma: Spectacle
+- Hyprland, Sway, and other wlroots compositors: grim
 
-Some Wayland desktops show a one-time system screen-sharing chooser. That prompt is controlled by the compositor and cannot be bypassed safely by applications.
+This avoids the system **Share Screen** dialog and its short confirmation timeout. If none of these native backends works, capture fails with an installation hint instead of unexpectedly opening a screen-sharing prompt. Advanced users can explicitly restore the portal fallback by launching with `PENGUIN_TOOLS_ALLOW_PORTAL_CAPTURE=1`.
 
 For development experiments only, set `PENGUIN_TOOLS_NATIVE_WAYLAND=1` to opt out of the compatibility mode. Dragging, exact edge docking, auto-hide positioning, and always-on-top behavior are expected to be unavailable in that mode because Electron cannot provide those operations on native Wayland.
 
@@ -112,7 +113,7 @@ All screenshots and notes stay on the local computer. Penguin Tools has no analy
 
 ## Known platform behavior
 
-- Wayland widget geometry is provided through XWayland when available; PipeWire/portal remains responsible for screen capture.
+- Wayland widget geometry is provided through XWayland when available; screen capture prefers the compositor-native Cinnamon/GNOME, Spectacle, or grim backend.
 
 - Multi-monitor capture targets the monitor containing the toolbar.
 - Network speed comes from `/proc/net/dev` on Linux. On other platforms it displays zero.
