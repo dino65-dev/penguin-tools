@@ -120,6 +120,7 @@ for argument in "\$@"; do
   esac
 done
 if [[ "\${XDG_SESSION_TYPE:-}" == "wayland" || -n "\${WAYLAND_DISPLAY:-}" ]] \\
+  && [[ -n "\${DISPLAY:-}" ]] \\
   && [[ "\${PENGUIN_TOOLS_NATIVE_WAYLAND:-0}" != "1" ]] \\
   && [[ "\$HAS_OZONE_OVERRIDE" != "1" ]]; then
   PENGUIN_ARGS+=(--ozone-platform=x11)
