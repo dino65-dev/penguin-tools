@@ -57,7 +57,9 @@ function configureLinuxDisplayBackend(electronApp, options = {}) {
     wayland,
     forcedXwayland,
     pipeWireEnabled: pipeWireAllowed,
-    backend: wayland && selectedOzonePlatform !== 'wayland' ? 'xwayland' : (wayland ? 'wayland' : 'x11'),
+    backend: wayland
+      ? (selectedOzonePlatform === 'x11' ? 'xwayland' : 'wayland')
+      : 'x11',
   };
 }
 
