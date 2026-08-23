@@ -24,7 +24,7 @@ A small, mouse-first Linux desktop maintenance toolbox. It stays above other win
 - Current text clipboard reader/writer
 - Opens your installed Linux calculator
 - System tray controls, always-on-top toggle, and launch-at-login option
-- X11 and Wayland support through Electron's desktop-capture APIs
+- X11 sessions run natively; Wayland sessions automatically use XWayland when available for reliable dragging, edge docking, and always-on-top behavior while capture stays on PipeWire/portal
 - Optional BleachBit cleanup and ClamAV folder scanning from the manager
 
 ## Install
@@ -42,7 +42,8 @@ Then open **Penguin Tools** from your application menu. The installer:
 - works without root access;
 - adds the `penguin-tools` command and application-menu entry;
 - falls back to AppImage extract-and-run mode when FUSE is unavailable.
-- detects a missing Wayland portal and installs the appropriate GNOME, KDE, Hyprland, or wlroots backend using your distro's package manager.
+- detects missing Wayland capture portals and installs the appropriate GNOME, KDE, Hyprland, or wlroots backend using your distro's package manager;
+- installs XWayland when needed so the floating widget can be positioned and docked reliably.
 
 Portal installation requests `sudo` only when the dependency is missing. Set `PENGUIN_TOOLS_SKIP_PORTAL=1` before the install command if you want to manage portal packages yourself.
 
@@ -61,13 +62,15 @@ npm install
 npm start
 ```
 
-On Wayland, screen capture uses the desktop portal. Install the portal implementation for your desktop if capture is unavailable:
+On Wayland, Penguin Tools automatically launches its windows through XWayland when the session exposes it because the native Wayland protocol does not permit applications to read or set global top-level window positions. Screen capture still uses PipeWire and the desktop portal. Install the portal implementation for your desktop if capture is unavailable:
 
 - GNOME: `xdg-desktop-portal-gnome`
 - KDE Plasma: `xdg-desktop-portal-kde`
 - wlroots compositors: `xdg-desktop-portal-wlr`
 
 Some Wayland desktops show a one-time system screen-sharing chooser. That prompt is controlled by the compositor and cannot be bypassed safely by applications.
+
+For development experiments only, set `PENGUIN_TOOLS_NATIVE_WAYLAND=1` to opt out of the compatibility mode. Dragging, exact edge docking, auto-hide positioning, and always-on-top behavior are expected to be unavailable in that mode because Electron cannot provide those operations on native Wayland.
 
 ## Power Tools backends
 
@@ -80,7 +83,7 @@ If either engine is missing, the manager offers to install it. Penguin Tools det
 
 ## Releases
 
-Every `v*` Git tag automatically builds x86-64 and ARM64 AppImage and Debian packages through GitHub Actions and publishes them to GitHub Releases.
+Every version bump merged into `main` automatically creates its `v*` tag, builds x86-64 and ARM64 AppImage and Debian packages through GitHub Actions, and publishes them to GitHub Releases.
 
 ## Build locally
 
@@ -108,6 +111,8 @@ The toolbar hides before the desktop image is captured, so it is not included in
 All screenshots and notes stay on the local computer. Penguin Tools has no analytics and sends no capture data to a server.
 
 ## Known platform behavior
+
+- Wayland widget geometry is provided through XWayland when available; PipeWire/portal remains responsible for screen capture.
 
 - Multi-monitor capture targets the monitor containing the toolbar.
 - Network speed comes from `/proc/net/dev` on Linux. On other platforms it displays zero.

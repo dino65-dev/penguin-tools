@@ -17,6 +17,12 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
+const { configureLinuxDisplayBackend } = require('./src/platform');
+
+const linuxDisplayBackend = configureLinuxDisplayBackend(app);
+if (linuxDisplayBackend.forcedXwayland) {
+  console.info('[Penguin Tools] Wayland session detected; using XWayland for reliable widget docking.');
+}
 
 const TOOLBAR_SIZE = { width: 446, height: 84 };
 const DOCKED_SIZE = { width: 72, height: 292 };
