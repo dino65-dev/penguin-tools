@@ -1,6 +1,6 @@
 {
   "name": "penguin-tools",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "A polished floating desktop maintenance toolbox for Linux",
   "desktopName": "penguin-tools",
   "main": "main.js",
@@ -12,9 +12,10 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "check": "node --check main.js && node --check preload.js && node --check src/widget.js && node --check src/peek.js && node --check src/manager.js && node --check src/capture.js",
+    "check": "node --check main.js && node --check preload.js && node --check src/platform.js && node --check src/widget.js && node --check src/peek.js && node --check src/manager.js && node --check src/capture.js && npm test",
     "dist:linux": "electron-builder --linux AppImage deb",
-    "dist:appimage": "electron-builder --linux AppImage"
+    "dist:appimage": "electron-builder --linux AppImage",
+    "test": "node --test test/*.test.js"
   },
   "devDependencies": {
     "electron": "^42.5.0",
