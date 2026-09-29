@@ -19,7 +19,7 @@
     "check:shell": "bash -n install.sh uninstall.sh"
   },
   "devDependencies": {
-    "electron": "^42.5.0",
+    "electron": "^42.10.0",
     "electron-builder": "^26.0.12"
   },
   "build": {
